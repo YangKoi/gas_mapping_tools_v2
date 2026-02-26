@@ -370,7 +370,7 @@ if app_mode == "1️⃣ Thiết kế Không gian Đa lớp (3D)":
                 column_config={"Layer": st.column_config.SelectboxColumn("Mặt phẳng", options=["Khí Nhẹ (Sát trần)", "Khí Nặng (Sát sàn)"]), "Color": st.column_config.SelectboxColumn("Màu", options=["cyan", "magenta", "yellow", "lime", "red"])}, key="ed_cfg_3d")
             st.session_state.auto_config = edited_auto_config
 
-            if st.button("🚀 Tự động Rải Đầu dò (Mặt bằng 3D)", type="primary"):
+            if st.button("🏗️ Tự động Rải Đầu dò (Mặt bằng 3D)", type="primary"):
                 if room_poly is not None:
                     new_dets = []
                     for _, row_cfg in edited_auto_config.iterrows():
@@ -463,7 +463,7 @@ elif app_mode == "2️⃣ Rải nhanh trên Bản vẽ 2D (Overlay)":
                 column_config={"Color": st.column_config.SelectboxColumn("Màu", options=["cyan", "magenta", "yellow", "lime", "red"])}, key="ed_cfg_2d")
             st.session_state.auto_config_2d = edited_auto_config_2d
             
-            if st.button("🚀 Tạo lưới phủ tự động", type="primary"):
+            if st.button("🏗️ Tạo lưới phủ tự động", type="primary"):
                 new_dets_2d = []
                 for _, row_cfg in edited_auto_config_2d.iterrows():
                     spacing = row_cfg["Radius"] * 1.5 
@@ -532,3 +532,4 @@ st.markdown("""
         Designed and programmed by <b>trggiang</b>.
     </div>
 """, unsafe_allow_html=True)
+
