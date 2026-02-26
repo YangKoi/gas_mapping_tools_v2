@@ -21,7 +21,7 @@ from matplotlib.path import Path
 # ==========================================
 st.set_page_config(page_title="Riken Viet - Enterprise Gas Mapping", layout="wide")
 
-# --- THANH CÔNG CỤ CỨU HỘ MẪU WORD (SIDEBAR) ---
+# --- CÔNG CỤ TẠO MẪU WORD SIÊU ĐƠN GIẢN ---
 def create_clean_template():
     doc = Document()
     
@@ -35,40 +35,27 @@ def create_clean_template():
     doc.add_paragraph("Đơn vị / Khách hàng: {{ client_name }}")
     doc.add_paragraph("Người lập báo cáo: {{ author_name }}")
     doc.add_paragraph("Ngày xuất báo cáo: {{ report_date }}")
+    doc.add_paragraph("_" * 60)
     
     # 3D
-    doc.add_heading('1. PHÂN BỔ KHÔNG GIAN TỔNG THỂ', level=1)
+    doc.add_heading('1. PHÂN BỔ KHÔNG GIAN TỔNG THỂ (MÔ PHỎNG 3D)', level=1)
     doc.add_paragraph("Sơ đồ dưới đây thể hiện vị trí không gian 3 chiều của các thiết bị đo khí, tủ trung tâm và các vật cản thực tế.")
     p3d = doc.add_paragraph("{{ img_3d }}")
     p3d.alignment = WD_ALIGN_PARAGRAPH.CENTER
     
-    # 2D
+    # 2D (Tự động nhúng toàn bộ)
     doc.add_heading('2. PHÂN TÍCH ĐIỂM MÙ THEO LỚP KHÍ (MẶT BẰNG 2D)', level=1)
-    doc.add_paragraph("{%p for map in gas_maps %}")
-    doc.add_paragraph("Bản đồ phân hệ: {{ map.gas_name }} (Mức độ che phủ an toàn: {{ map.coverage }}%)")
-    p2d = doc.add_paragraph("{{ map.img_2d }}")
-    p2d.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    doc.add_paragraph("{%p endfor %}")
+    doc.add_paragraph("{{ gas_maps_section }}")
     
-    # BOM Table
+    # BOM (Tự động nhúng bảng)
     doc.add_heading('3. BẢNG BÓC TÁCH KHỐI LƯỢNG VẬT TƯ (BOM)', level=1)
-    table = doc.add_table(rows=2, cols=4)
-    table.style = 'Table Grid'
-    hdr = table.rows[0].cells
-    hdr[0].text = 'STT'
-    hdr[1].text = 'Hạng mục Thiết bị & Vật tư'
-    hdr[2].text = 'Đơn vị'
-    hdr[3].text = 'Khối lượng'
-    
-    row = table.rows[1].cells
-    row[0].text = "{%tr for item in bom_items %}{{ item.stt }}"
-    row[1].text = "{{ item.name }}"
-    row[2].text = "{{ item.unit }}"
-    row[3].text = "{{ item.qty }}{%tr endfor %}"
+    doc.add_paragraph("{{ bom_table }}")
     
     # Footer
     footer = section.footer
-    footer.paragraphs[0].text = "Bản quyền thuộc về Riken Việt, không sao chép và sử dụng sai mục đích."
+    f_para = footer.paragraphs[0]
+    f_para.text = "Bản quyền thuộc về Riken Việt, không sao chép và sử dụng sai mục đích."
+    f_para.runs[0].italic = True
     
     stream = io.BytesIO()
     doc.save(stream)
@@ -76,12 +63,10 @@ def create_clean_template():
     return stream
 
 with st.sidebar:
-    st.header("🛠️ Công cụ sửa lỗi File Word")
-    st.info("Nếu báo cáo bị lỗi 'unknown tag', nguyên nhân do MS Word tự chèn mã ẩn làm gãy từ khóa. Hãy bấm nút dưới đây để tải File Mẫu Chuẩn (100% không dính lỗi).")
+    st.header("🛠️ Công cụ File Word")
+    st.info("Công nghệ Subdoc mới giúp loại bỏ hoàn toàn lỗi vòng lặp XML. Hãy tải lại file mẫu siêu đơn giản này!")
     clean_docx = create_clean_template()
-    st.download_button("📥 TẢI FILE MẪU CHUẨN (Sạch lỗi XML)", clean_docx, "Mau_Bao_Cao.docx", type="primary")
-    st.caption("**Hướng dẫn:** Tải file này về -> Mở lên chèn Logo của công ty vào -> Lưu lại -> Tải đè lên GitHub là xong!")
-
+    st.download_button("📥 TẢI FILE MẪU CHUẨN MỚI NHẤT", clean_docx, "Mau_Bao_Cao.docx", type="primary")
 
 # --- TIẾP TỤC GIAO DIỆN CHÍNH ---
 st.title("🛡️ Riken Viet - Hệ thống Thiết kế & Dự toán Vùng phủ Khí")
@@ -412,34 +397,47 @@ def generate_plotly_3d_complex(room_poly, rz, obs_polys, df_obs, df_dets, px, py
     )
     return fig
 
-# CÔNG NGHỆ TEMPLATE DOCXTPL
+# CÔNG NGHỆ SUBDOC: TỰ SINH BẢNG VÀ HÌNH ẢNH MÀ KHÔNG CẦN VÒNG LẶP TRONG WORD
 def generate_word_template(template_path, figs_dict, img_3d_bytes, bom_df, p_name, c_name, author, r_date, r_num):
     doc = DocxTemplate(template_path)
     
-    img_3d_obj = None
-    if img_3d_bytes:
-        img_3d_obj = InlineImage(doc, img_3d_bytes, width=Inches(6.0))
+    # Xử lý 3D Image
+    img_3d_obj = InlineImage(doc, img_3d_bytes, width=Inches(6.0)) if img_3d_bytes else ""
         
-    bom_list = []
+    # Tạo Subdoc cho Bảng BOM
+    sd_bom = doc.new_subdoc()
+    table = sd_bom.add_table(rows=1, cols=4)
+    table.style = 'Table Grid'
+    hdr = table.rows[0].cells
+    hdr[0].text, hdr[1].text, hdr[2].text, hdr[3].text = 'STT', 'Hạng mục Thiết bị & Vật tư', 'Đơn vị', 'Khối lượng'
+    for cell in hdr:
+        for p in cell.paragraphs:
+            for r in p.runs: r.font.bold = True
+            
     for _, row in bom_df.iterrows():
-        bom_list.append({
-            'stt': row['STT'],
-            'name': row['Hạng mục thiết bị'],
-            'unit': row['Đơn vị'],
-            'qty': f"{int(row['Khối lượng']):,}"
-        })
+        row_cells = table.add_row().cells
+        row_cells[0].text = str(row['STT'])
+        row_cells[1].text = str(row['Hạng mục thiết bị'])
+        row_cells[2].text = str(row['Đơn vị'])
+        row_cells[3].text = f"{int(row['Khối lượng']):,}"
         
-    gas_maps_list = []
+    # Tạo Subdoc cho Các bản đồ 2D
+    sd_maps = doc.new_subdoc()
     for gas_name, fig_info in figs_dict.items():
+        # Thêm tiêu đề cho từng bản đồ
+        p_title = sd_maps.add_paragraph()
+        p_title.add_run(f"Bản đồ phân hệ: {gas_name} ").bold = True
+        p_title.add_run(f"(Mức độ an toàn: {fig_info['coverage']:.1f}%)").italic = True
+        
+        # Thêm ảnh 2D
         img_stream = io.BytesIO()
         fig_info['fig'].savefig(img_stream, format='png', bbox_inches='tight', dpi=150)
         img_stream.seek(0)
-        gas_maps_list.append({
-            'gas_name': gas_name,
-            'coverage': f"{fig_info['coverage']:.1f}",
-            'img_2d': InlineImage(doc, img_stream, width=Inches(6.0))
-        })
+        sd_maps.add_picture(img_stream, width=Inches(6.0))
+        sd_maps.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        sd_maps.add_paragraph() # Dòng trắng ngăn cách
         
+    # Nạp toàn bộ dữ liệu vào file Word mẫu
     context = {
         'report_number': r_num,
         'project_name': p_name.upper(),
@@ -447,8 +445,8 @@ def generate_word_template(template_path, figs_dict, img_3d_bytes, bom_df, p_nam
         'author_name': author,
         'report_date': r_date.strftime('%d/%m/%Y'),
         'img_3d': img_3d_obj,
-        'bom_items': bom_list,
-        'gas_maps': gas_maps_list
+        'bom_table': sd_bom,         # Gọi cái bảng đã tạo sẵn
+        'gas_maps_section': sd_maps  # Gọi các hình 2D đã tạo sẵn
     }
     
     doc.render(context)
@@ -502,11 +500,12 @@ if st.button("📊 Chạy Mô phỏng Đồ họa & Tải Báo cáo Kỹ thuật
                                 st.warning(f"⚠️ Tỷ lệ bao phủ của {gas_name} chỉ đạt: {coverage:.1f}%")
                             generated_figs[gas_name] = {'fig': fig_2d, 'coverage': coverage}
                     
+                    # Gọi hệ thống tạo file
                     word_stream = generate_word_template("Mau_Bao_Cao.docx", generated_figs, img_3d_bytes, edited_bom, project_name, client_name, author_name, report_date, report_number)
                     st.download_button("📄 Tải Báo cáo chuẩn Form Công ty", word_stream, f"{report_number.replace('/','_')}_{client_name}.docx", type="primary")
 
         except Exception as e:
-            st.error(f"Lỗi hệ thống: {e}. Vui lòng tải lại File Mẫu Chuẩn ở cột bên trái.")
+            st.error(f"Lỗi hệ thống: {e}. Có vẻ file Word Mẫu của bạn vẫn còn dính từ khóa cũ. Hãy tải lại File Mẫu ở thanh bên trái!")
 
 st.markdown("""
     <hr style="border: 0; height: 1px; background-image: linear-gradient(to right, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0)); margin-top: 50px;">
