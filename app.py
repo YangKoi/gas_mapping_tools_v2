@@ -23,8 +23,10 @@ st.set_page_config(page_title="Riken Viet - Enterprise Gas Mapping", layout="wid
 
 # --- ĐIỀU HƯỚNG BẰNG SIDEBAR (MENU TRÁI) ---
 with st.sidebar:
-    # Hiển thị Logo nếu có
-    if os.path.exists("header_logo.png"):
+    # Ưu tiên hiển thị rkv_logo.png (Logo vuông) cho thanh Sidebar để không bị bóp méo
+    if os.path.exists("rkv_logo.png"):
+        st.image("rkv_logo.png", use_container_width=True)
+    elif os.path.exists("header_logo.png"):
         st.image("header_logo.png", use_container_width=True)
     else:
         st.markdown("### RIKEN VIET")
@@ -227,6 +229,7 @@ def generate_full_word_report(figs_dict, img_3d_bytes, bom_df, p_name, c_name, a
     header = section.header
     h_para = header.paragraphs[0]
     h_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    # Header luôn dùng ảnh Banner dài để đảm bảo form chuyên nghiệp
     if os.path.exists("header_logo.png"): h_para.add_run().add_picture("header_logo.png", width=Inches(6.5))
     else: h_para.add_run("CÔNG TY TNHH CÔNG NGHỆ THIẾT BỊ DÒ KHÍ RIKEN VIET").bold = True
     
@@ -301,7 +304,7 @@ def generate_full_word_report(figs_dict, img_3d_bytes, bom_df, p_name, c_name, a
 # LUỒNG CHÍNH 1: MÔ PHỎNG 3D CHUYÊN SÂU
 # ==========================================
 if app_mode == "1️⃣ Thiết kế Không gian Đa lớp (3D)":
-    st.markdown("## Chế độ Thiết kế Không gian 3D Chuyên sâu")
+    st.markdown("## 🧊 Chế độ Thiết kế Không gian 3D Chuyên sâu")
     
     col_input1, col_input2 = st.columns([1.2, 1.1])
     with col_input1:
@@ -338,7 +341,6 @@ if app_mode == "1️⃣ Thiết kế Không gian Đa lớp (3D)":
             ax_grid.plot(panel_x, panel_y, 's', color='red', markersize=12, markeredgecolor='black', zorder=12)
             ax_grid.text(panel_x + 0.5, panel_y + 0.5, "TỦ TT", color='red', fontweight='bold', zorder=12)
             
-            # Vẽ thử vật cản nháp
             for _, obs in st.session_state.obs_data.iterrows():
                 if obs['Type'] == 'Cylinder': ax_grid.add_patch(plt.Circle((obs['X'], obs['Y']), obs['Width_Radius'], color='gray', alpha=0.5))
                 elif obs['Type'] == 'Box':
@@ -389,7 +391,6 @@ if app_mode == "1️⃣ Thiết kế Không gian Đa lớp (3D)":
         edited_dets = st.data_editor(st.session_state.det_data, num_rows="dynamic", use_container_width=True, key="ed_dets_3d")
         st.session_state.det_data = edited_dets
 
-    # CHẠY PHÂN TÍCH VÀ HIỂN THỊ ĐỒ HỌA TRỰC TIẾP LÊN WEB (ĐÃ KHÔI PHỤC)
     st.markdown("---")
     st.header("3. 📊 Phân tích & Xuất Báo cáo")
     col_info1, col_info2, col_info3 = st.columns([1, 1, 1])
@@ -407,7 +408,6 @@ if app_mode == "1️⃣ Thiết kế Không gian Đa lớp (3D)":
             with st.spinner('Đang nội suy không gian 3D và kết xuất báo cáo...'):
                 obs_polys = create_obstacle_polys(edited_obs)
                 
-                # Hiển thị biểu đồ 3D
                 fig_3d = generate_plotly_3d_complex(room_poly, room_z, obs_polys, edited_obs, edited_dets, panel_x, panel_y, panel_z)
                 st.plotly_chart(fig_3d, use_container_width=True)
                 
@@ -415,7 +415,6 @@ if app_mode == "1️⃣ Thiết kế Không gian Đa lớp (3D)":
                 try: fig_3d.write_image(img_3d_bytes, format='png', width=800, height=500); img_3d_bytes.seek(0)
                 except: img_3d_bytes = None
 
-                # ĐÃ KHÔI PHỤC: HIỂN THỊ TABS BẢN ĐỒ 2D NGAY TRÊN WEB
                 gas_groups = edited_dets['Gas'].unique()
                 ui_tabs = st.tabs([f"Bản đồ: {g}" for g in gas_groups])
                 figs_dict = {} 
@@ -423,15 +422,14 @@ if app_mode == "1️⃣ Thiết kế Không gian Đa lớp (3D)":
                 for i, gas_name in enumerate(gas_groups):
                     with ui_tabs[i]:
                         f, c = generate_2d_plot(room_poly, obs_polys, edited_dets[edited_dets['Gas']==gas_name], gas_name, panel_x, panel_y)
-                        st.pyplot(f) # Hiển thị hình ảnh
+                        st.pyplot(f) 
                         if c >= 80: st.success(f"✅ Độ phủ: {c:.1f}%")
                         else: st.warning(f"⚠️ Độ phủ: {c:.1f}%")
                         figs_dict[gas_name] = {'fig': f, 'coverage': c}
 
-                # Tạo BOM và xuất Word
                 bom_df = build_bom_df(edited_dets, panel_x, panel_y, room_z, panel_z, wastage_percent)
                 st.write("📋 **Bảng Bóc tách Khối lượng (BOM):**")
-                st.dataframe(bom_df) # Hiển thị BOM lên web
+                st.dataframe(bom_df) 
                 
                 word_stream = generate_full_word_report(figs_dict, img_3d_bytes, bom_df, project_name, client_name, author_name, report_date, report_number, is_3d=True)
                 st.download_button("📥 TẢI BÁO CÁO WORD (3D)", word_stream, f"BaoCao_3D_{client_name}.docx", type="primary")
@@ -441,7 +439,7 @@ if app_mode == "1️⃣ Thiết kế Không gian Đa lớp (3D)":
 # LUỒNG CHÍNH 2: RẢI NHANH TRÊN BẢN VẼ 2D
 # ==========================================
 elif app_mode == "2️⃣ Rải nhanh trên Bản vẽ 2D (Overlay)":
-    st.markdown("## Chế độ Rải nhanh trên Bản vẽ 2D (Overlay)")
+    st.markdown("## 🖼️ Chế độ Rải nhanh trên Bản vẽ 2D (Overlay)")
     
     col_2d_1, col_2d_2 = st.columns([1.2, 1.1])
     
@@ -534,4 +532,3 @@ st.markdown("""
         Designed and programmed by <b>trggiang</b>.
     </div>
 """, unsafe_allow_html=True)
-
