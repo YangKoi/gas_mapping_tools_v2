@@ -23,7 +23,6 @@ st.set_page_config(page_title="Riken Viet - Enterprise Gas Mapping", layout="wid
 
 # --- ĐIỀU HƯỚNG BẰNG SIDEBAR (MENU TRÁI) ---
 with st.sidebar:
-    # Ưu tiên hiển thị rkv_logo.png (Logo vuông) cho thanh Sidebar để không bị bóp méo
     if os.path.exists("rkv_logo.png"):
         st.image("rkv_logo.png", use_container_width=True)
     elif os.path.exists("header_logo.png"):
@@ -43,7 +42,6 @@ with st.sidebar:
 st.title("🛡️ Riken Viet - Hệ thống Thiết kế & Dự toán Vùng phủ Khí")
 
 # --- KHỞI TẠO DỮ LIỆU ---
-# Dữ liệu Mode 1 (3D)
 if 'room_data' not in st.session_state:
     st.session_state.room_data = pd.DataFrame({"X": [0, 15, 15, 0], "Y": [0, 0, 10, 10]}) 
 if 'obs_data' not in st.session_state:
@@ -56,7 +54,6 @@ if 'auto_config' not in st.session_state:
 if 'det_data' not in st.session_state:
     st.session_state.det_data = pd.DataFrame(columns=["ID", "Model", "Gas", "X", "Y", "Z", "Radius", "Color"])
 
-# Dữ liệu Mode 2 (2D Overlay)
 if 'det_data_2d' not in st.session_state:
     st.session_state.det_data_2d = pd.DataFrame(columns=["ID", "Model", "Gas", "X", "Y", "Radius", "Color"])
 if 'obs_data_2d' not in st.session_state:
@@ -66,25 +63,31 @@ if 'auto_config_2d' not in st.session_state:
 
 
 # ==========================================
-# CÁC HÀM XỬ LÝ LÕI VÀ ĐỒ HỌA
+# CÁC HÀM LÕI VÀ ĐỒ HỌA (ĐÃ BỔ SUNG BỘ LỌC CHỐNG LỖI NaN)
 # ==========================================
 def create_obstacle_polys(df_obs):
     obs_polys = []
     for _, row in df_obs.iterrows():
+        # BỘ LỌC AN TOÀN: Bỏ qua nếu người dùng vừa bấm nút Thêm dòng mới mà chưa nhập số liệu
+        if pd.isna(row['X']) or pd.isna(row['Y']) or pd.isna(row['Width_Radius']):
+            continue
+            
         if row['Type'] == 'Cylinder':
             obs_polys.append(Point(row['X'], row['Y']).buffer(row['Width_Radius']))
         elif row['Type'] == 'Box':
-            w, l = row['Width_Radius'], row['Length']
+            w = row['Width_Radius']
+            l = row['Length'] if not pd.isna(row['Length']) else 0
+            ang = row.get('Angle', 0) if not pd.isna(row.get('Angle', 0)) else 0
             box = Polygon([(row['X']-w/2, row['Y']-l/2), (row['X']+w/2, row['Y']-l/2),
                            (row['X']+w/2, row['Y']+l/2), (row['X']-w/2, row['Y']+l/2)])
-            box = affinity.rotate(box, row.get('Angle', 0), origin='center')
-            obs_polys.append(box)
+            obs_polys.append(affinity.rotate(box, ang, origin='center'))
     return obs_polys
 
 def check_collision_shapely(df_dets, obs_polys):
     collisions = []
     if not obs_polys or df_dets.empty: return collisions
     for _, det in df_dets.iterrows():
+        if pd.isna(det['X']) or pd.isna(det['Y']): continue # Bỏ qua dòng trống
         pt = Point(det['X'], det['Y'])
         if any(poly.contains(pt) for poly in obs_polys): collisions.append(det['ID'])
     return collisions
@@ -107,6 +110,8 @@ def generate_2d_plot(room_poly, obs_polys, df_dets_group, gas_name, px, py, bg_i
     coverage_mask = np.zeros(len(pts_x), dtype=bool)
 
     for _, det in df_dets_group.iterrows():
+        if pd.isna(det['X']) or pd.isna(det['Y']) or pd.isna(det['Radius']): continue
+        
         dx, dy, dr = det['X'], det['Y'], det['Radius']
         dist_sq = (pts_x - dx)**2 + (pts_y - dy)**2
         in_radius_mask = dist_sq <= dr**2
@@ -144,11 +149,11 @@ def generate_2d_plot(room_poly, obs_polys, df_dets_group, gas_name, px, py, bg_i
 
     valid_colors = mcolors.CSS4_COLORS
     for _, det in df_dets_group.iterrows():
-        c = det['Color'].lower()
-        use_c = c if c in valid_colors else 'blue'
-        ax.add_patch(plt.Circle((det['X'], det['Y']), det['Radius'], color=use_c, fill=False, linestyle='--', lw=1.5, zorder=3))
-        ax.text(det['X']+0.3, det['Y']+0.3, f"{det['ID']}", fontsize=8, color='black', zorder=6, bbox=dict(facecolor='white', alpha=0.7, edgecolor='none', pad=1))
-        ax.plot(det['X'], det['Y'], '^', color=use_c, markersize=12, markeredgecolor='black', zorder=5)
+        if pd.isna(det['X']) or pd.isna(det['Y']): continue
+        c = det['Color'].lower() if isinstance(det['Color'], str) and det['Color'].lower() in valid_colors else 'blue'
+        ax.add_patch(plt.Circle((det['X'], det['Y']), det['Radius'], color=c, fill=False, linestyle='--', lw=1.5, zorder=3))
+        ax.text(det['X']+0.3, det['Y']+0.3, str(det['ID']), fontsize=8, color='black', zorder=6, bbox=dict(facecolor='white', alpha=0.7, edgecolor='none', pad=1))
+        ax.plot(det['X'], det['Y'], '^', color=c, markersize=12, markeredgecolor='black', zorder=5)
 
     ax.set_title(f"Bản đồ phân tích: {gas_name} | Mức an toàn: {ty_le:.1f}%", fontweight='bold')
     ax.axis('equal'); ax.grid(True, linestyle=':', alpha=0.5)
@@ -171,22 +176,23 @@ def generate_plotly_3d_complex(room_poly, rz, obs_polys, df_obs, df_dets, px, py
         return r*np.cos(u)*np.sin(v)+x0, r*np.sin(u)*np.sin(v)+y0, r*np.cos(v)+z0
 
     for _, det in df_dets.iterrows():
+        if pd.isna(det['X']) or pd.isna(det['Y']) or pd.isna(det['Z']): continue
         hover_label = f"Model: {det['ID']}<br>Mục tiêu: {det['Gas']}<br>Cao độ Z: {det['Z']}m"
         fig.add_trace(go.Scatter3d(x=[det['X']], y=[det['Y']], z=[det['Z']], mode='markers+text', marker=dict(size=6, color='white'), text=[f"{det['ID']}<br>({det['Gas']})"], textposition="top center", textfont=dict(color="white", size=10), name=det['ID'], hoverinfo="text", hovertext=hover_label))
-        
         sx, sy, sz = get_sphere(det['X'], det['Y'], det['Z'], det['Radius'])
         fig.add_trace(go.Surface(x=sx, y=sy, z=sz, opacity=0.15, showscale=False, colorscale=[[0, det['Color']], [1, det['Color']]]))
 
     for i, (_, obs) in enumerate(df_obs.iterrows()):
+        if pd.isna(obs['X']) or pd.isna(obs['Y']) or pd.isna(obs['Width_Radius']): continue
         if obs['Type'] == 'Cylinder':
-            z_grid, theta = np.mgrid[0:obs['Height']:2j, 0:2*np.pi:20j]
+            z_grid, theta = np.mgrid[0:obs.get('Height', 4):2j, 0:2*np.pi:20j]
             fig.add_trace(go.Surface(x=obs['Width_Radius']*np.cos(theta)+obs['X'], y=obs['Width_Radius']*np.sin(theta)+obs['Y'], z=z_grid, opacity=1.0, showscale=False, colorscale='Greys', name="Bồn trụ"))
         elif obs['Type'] == 'Box':
             box_2d = obs_polys[i]
             bx, by = box_2d.exterior.xy
             bx, by = list(bx)[:-1], list(by)[:-1] 
             x_box, y_box = bx * 2, by * 2
-            z_box = [0]*4 + [obs['Height']]*4
+            z_box = [0]*4 + [obs.get('Height', 4)]*4
             ii, jj, kk = [7,0,0,0,4,4,6,6,4,0,3,2], [3,4,1,2,5,6,5,2,0,1,6,3], [0,7,2,3,6,7,1,1,5,5,7,6]
             fig.add_trace(go.Mesh3d(x=x_box, y=y_box, z=z_box, i=ii, j=jj, k=kk, color='gray', opacity=1.0, name="Tủ/Kệ"))
 
@@ -204,19 +210,23 @@ def build_bom_df(det_df, p_x, p_y, r_z, p_z, waste):
     bom_items = [{"STT": 1, "Hạng mục thiết bị": "Tủ điều khiển trung tâm đo khí", "Đơn vị": "Bộ", "Khối lượng": 1}]
     stt = 2
     total_cable_length = 0
-    if not det_df.empty and 'Model' in det_df.columns:
-        counts = det_df['Model'].value_counts()
+    
+    valid_dets = det_df.dropna(subset=['X', 'Y']) # Lọc bỏ các thiết bị chưa có tọa độ
+    
+    if not valid_dets.empty and 'Model' in valid_dets.columns:
+        counts = valid_dets['Model'].value_counts()
         for model, qty in counts.items():
             bom_items.append({"STT": stt, "Hạng mục thiết bị": f"Đầu dò đo khí rò rỉ - Model: {model}", "Đơn vị": "Bộ", "Khối lượng": qty})
             stt += 1
-        for _, d in det_df.iterrows():
-            cable_up = abs(r_z - p_z) if 'Z' in det_df.columns else 3.0
+        for _, d in valid_dets.iterrows():
+            cable_up = abs(r_z - p_z) if 'Z' in valid_dets.columns and not pd.isna(d.get('Z')) else 3.0
             cable_horizontal = abs(d['X'] - p_x) + abs(d['Y'] - p_y)
-            cable_down = abs(r_z - d['Z']) if 'Z' in det_df.columns else 1.5 
+            cable_down = abs(r_z - d['Z']) if 'Z' in valid_dets.columns and not pd.isna(d.get('Z')) else 1.5 
             total_cable_length += (cable_up + cable_horizontal + cable_down)
         total_cable_length = math.ceil(total_cable_length * (1 + waste / 100))
+        
     bom_items.append({"STT": stt, "Hạng mục thiết bị": "Cáp tín hiệu chống nhiễu chuyên dụng", "Đơn vị": "Mét", "Khối lượng": total_cable_length})
-    bom_items.append({"STT": stt+1, "Hạng mục thiết bị": "Chuông đèn cảnh báo (Siren/Light)", "Đơn vị": "Bộ", "Khối lượng": len(det_df) if not det_df.empty else 1})
+    bom_items.append({"STT": stt+1, "Hạng mục thiết bị": "Chuông đèn cảnh báo (Siren/Light)", "Đơn vị": "Bộ", "Khối lượng": len(valid_dets) if not valid_dets.empty else 1})
     return pd.DataFrame(bom_items)
 
 def generate_full_word_report(figs_dict, img_3d_bytes, bom_df, p_name, c_name, author, r_date, r_num, is_3d=True):
@@ -229,7 +239,6 @@ def generate_full_word_report(figs_dict, img_3d_bytes, bom_df, p_name, c_name, a
     header = section.header
     h_para = header.paragraphs[0]
     h_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    # Header luôn dùng ảnh Banner dài để đảm bảo form chuyên nghiệp
     if os.path.exists("header_logo.png"): h_para.add_run().add_picture("header_logo.png", width=Inches(6.5))
     else: h_para.add_run("CÔNG TY TNHH CÔNG NGHỆ THIẾT BỊ DÒ KHÍ RIKEN VIET").bold = True
     
@@ -336,21 +345,28 @@ if app_mode == "1️⃣ Thiết kế Không gian Đa lớp (3D)":
             ax_grid.plot(x_ext, y_ext, color='#333333', linewidth=2)
             ax_grid.fill(x_ext, y_ext, alpha=0.1, color='blue')
             for idx, row in edited_room.iterrows():
+                # Bộ lọc an toàn dòng trống
+                if pd.isna(row['X']) or pd.isna(row['Y']): continue
                 ax_grid.plot(row['X'], row['Y'], 'ro', markersize=6, zorder=10)
                 ax_grid.text(row['X'] + 0.3, row['Y'] + 0.3, f"P{idx}", color='red', fontweight='bold', fontsize=11, zorder=11)
             ax_grid.plot(panel_x, panel_y, 's', color='red', markersize=12, markeredgecolor='black', zorder=12)
             ax_grid.text(panel_x + 0.5, panel_y + 0.5, "TỦ TT", color='red', fontweight='bold', zorder=12)
             
             for _, obs in st.session_state.obs_data.iterrows():
+                if pd.isna(obs['X']) or pd.isna(obs['Y']) or pd.isna(obs['Width_Radius']): continue
                 if obs['Type'] == 'Cylinder': ax_grid.add_patch(plt.Circle((obs['X'], obs['Y']), obs['Width_Radius'], color='gray', alpha=0.5))
                 elif obs['Type'] == 'Box':
-                    box = Polygon([(obs['X']-obs['Width_Radius']/2, obs['Y']-obs['Length']/2), (obs['X']+obs['Width_Radius']/2, obs['Y']-obs['Length']/2),
-                                   (obs['X']+obs['Width_Radius']/2, obs['Y']+obs['Length']/2), (obs['X']-obs['Width_Radius']/2, obs['Y']+obs['Length']/2)])
-                    bx, by = affinity.rotate(box, obs.get('Angle', 0), origin='center').exterior.xy
+                    w = obs['Width_Radius']
+                    l = obs['Length'] if not pd.isna(obs['Length']) else 0
+                    ang = obs.get('Angle', 0) if not pd.isna(obs.get('Angle', 0)) else 0
+                    box = Polygon([(obs['X']-w/2, obs['Y']-l/2), (obs['X']+w/2, obs['Y']-l/2),
+                                   (obs['X']+w/2, obs['Y']+l/2), (obs['X']-w/2, obs['Y']+l/2)])
+                    bx, by = affinity.rotate(box, ang, origin='center').exterior.xy
                     ax_grid.fill(bx, by, color='gray', alpha=0.5)
             
             for _, det in st.session_state.det_data.iterrows():
-                c = det['Color'].lower() if det['Color'].lower() in mcolors.CSS4_COLORS else 'blue'
+                if pd.isna(det['X']) or pd.isna(det['Y']): continue
+                c = det['Color'].lower() if isinstance(det['Color'], str) and det['Color'].lower() in mcolors.CSS4_COLORS else 'blue'
                 ax_grid.plot(det['X'], det['Y'], '^', color=c, markersize=8, markeredgecolor='black')
 
             ax_grid.set_aspect('equal'); ax_grid.grid(True, linestyle='--', alpha=0.5)
@@ -370,7 +386,7 @@ if app_mode == "1️⃣ Thiết kế Không gian Đa lớp (3D)":
                 column_config={"Layer": st.column_config.SelectboxColumn("Mặt phẳng", options=["Khí Nhẹ (Sát trần)", "Khí Nặng (Sát sàn)"]), "Color": st.column_config.SelectboxColumn("Màu", options=["cyan", "magenta", "yellow", "lime", "red"])}, key="ed_cfg_3d")
             st.session_state.auto_config = edited_auto_config
 
-            if st.button("🏗️ Tự động Rải Đầu dò (Mặt bằng 3D)", type="primary"):
+            if st.button("🚀 Tự động Rải Đầu dò (Mặt bằng 3D)", type="primary"):
                 if room_poly is not None:
                     new_dets = []
                     for _, row_cfg in edited_auto_config.iterrows():
@@ -402,8 +418,8 @@ if app_mode == "1️⃣ Thiết kế Không gian Đa lớp (3D)":
     report_date = st.date_input("Ngày lập báo cáo", key="rd_1")
 
     if st.button("🚀 CHẠY MÔ PHỎNG & TẠO FILE BÁO CÁO (3D)", type='primary', use_container_width=True):
-        if room_poly is None or edited_dets.empty:
-            st.error("Lỗi: Cần vẽ phòng và rải đầu dò trước khi chạy!")
+        if room_poly is None or edited_dets.dropna(subset=['X', 'Y']).empty:
+            st.error("Lỗi: Cần vẽ phòng và có ít nhất 1 đầu dò trước khi chạy!")
         else:
             with st.spinner('Đang nội suy không gian 3D và kết xuất báo cáo...'):
                 obs_polys = create_obstacle_polys(edited_obs)
@@ -415,7 +431,7 @@ if app_mode == "1️⃣ Thiết kế Không gian Đa lớp (3D)":
                 try: fig_3d.write_image(img_3d_bytes, format='png', width=800, height=500); img_3d_bytes.seek(0)
                 except: img_3d_bytes = None
 
-                gas_groups = edited_dets['Gas'].unique()
+                gas_groups = edited_dets.dropna(subset=['Gas'])['Gas'].unique()
                 ui_tabs = st.tabs([f"Bản đồ: {g}" for g in gas_groups])
                 figs_dict = {} 
                 
@@ -463,7 +479,7 @@ elif app_mode == "2️⃣ Rải nhanh trên Bản vẽ 2D (Overlay)":
                 column_config={"Color": st.column_config.SelectboxColumn("Màu", options=["cyan", "magenta", "yellow", "lime", "red"])}, key="ed_cfg_2d")
             st.session_state.auto_config_2d = edited_auto_config_2d
             
-            if st.button("🏗️ Tạo lưới phủ tự động", type="primary"):
+            if st.button("🚀 Tạo lưới phủ tự động", type="primary"):
                 new_dets_2d = []
                 for _, row_cfg in edited_auto_config_2d.iterrows():
                     spacing = row_cfg["Radius"] * 1.5 
@@ -495,15 +511,15 @@ elif app_mode == "2️⃣ Rải nhanh trên Bản vẽ 2D (Overlay)":
     report_date = st.date_input("Ngày lập báo cáo", key="rd_2")
 
     if st.button("🚀 CHẠY MÔ PHỎNG & TẠO FILE BÁO CÁO (2D)", type='primary', use_container_width=True):
-        if bg_file is None or edited_dets_2d.empty:
-            st.error("Lỗi: Bạn cần Upload bản vẽ và rải đầu dò!")
+        if bg_file is None or edited_dets_2d.dropna(subset=['X', 'Y']).empty:
+            st.error("Lỗi: Bạn cần Upload bản vẽ và rải đầu dò (ít nhất 1 đầu dò có tọa độ)!")
         else:
             with st.spinner('Đang ép lớp nhiệt (Heatmap) lên bản vẽ...'):
                 img = Image.open(bg_file)
                 bg_poly = Polygon([(0,0), (bg_real_width,0), (bg_real_width, bg_real_height), (0, bg_real_height)])
                 obs_polys_2d = create_obstacle_polys(edited_obs_2d)
                 
-                gas_groups = edited_dets_2d['Gas'].unique()
+                gas_groups = edited_dets_2d.dropna(subset=['Gas'])['Gas'].unique()
                 ui_tabs = st.tabs([f"Bản đồ: {g}" for g in gas_groups])
                 figs_dict_2d = {}
                 
@@ -532,4 +548,3 @@ st.markdown("""
         Designed and programmed by <b>trggiang</b>.
     </div>
 """, unsafe_allow_html=True)
-
