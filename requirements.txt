@@ -1,0 +1,13 @@
+streamlit
+pandas
+numpy
+matplotlib
+python-docx
+plotly
+kaleido==0.2.1
+shapely
+Pillow
+docxtpl
+
+
+
