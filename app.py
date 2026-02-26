@@ -8,8 +8,10 @@ import math
 import io
 import os
 
+from docx import Document
 from docxtpl import DocxTemplate, InlineImage
 from docx.shared import Inches
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 from shapely.geometry import Point, LineString, Polygon
 import shapely.affinity as affinity
 from matplotlib.path import Path
@@ -18,6 +20,70 @@ from matplotlib.path import Path
 # CẤU HÌNH TRANG WEB & STATE
 # ==========================================
 st.set_page_config(page_title="Riken Viet - Enterprise Gas Mapping", layout="wide")
+
+# --- THANH CÔNG CỤ CỨU HỘ MẪU WORD (SIDEBAR) ---
+def create_clean_template():
+    doc = Document()
+    
+    # Header
+    section = doc.sections[0]
+    header = section.header
+    header.paragraphs[0].text = "CÔNG TY TNHH CÔNG NGHỆ THIẾT BỊ DÒ KHÍ RIKEN VIET\nSố/ No.: {{ report_number }}"
+    
+    doc.add_heading('BÁO CÁO THIẾT KẾ VÀ DỰ TOÁN HỆ THỐNG ĐO KHÍ', 0).alignment = WD_ALIGN_PARAGRAPH.CENTER
+    doc.add_paragraph("Tên Dự án: {{ project_name }}")
+    doc.add_paragraph("Đơn vị / Khách hàng: {{ client_name }}")
+    doc.add_paragraph("Người lập báo cáo: {{ author_name }}")
+    doc.add_paragraph("Ngày xuất báo cáo: {{ report_date }}")
+    
+    # 3D
+    doc.add_heading('1. PHÂN BỔ KHÔNG GIAN TỔNG THỂ', level=1)
+    doc.add_paragraph("Sơ đồ dưới đây thể hiện vị trí không gian 3 chiều của các thiết bị đo khí, tủ trung tâm và các vật cản thực tế.")
+    p3d = doc.add_paragraph("{{ img_3d }}")
+    p3d.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    
+    # 2D
+    doc.add_heading('2. PHÂN TÍCH ĐIỂM MÙ THEO LỚP KHÍ (MẶT BẰNG 2D)', level=1)
+    doc.add_paragraph("{%p for map in gas_maps %}")
+    doc.add_paragraph("Bản đồ phân hệ: {{ map.gas_name }} (Mức độ che phủ an toàn: {{ map.coverage }}%)")
+    p2d = doc.add_paragraph("{{ map.img_2d }}")
+    p2d.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    doc.add_paragraph("{%p endfor %}")
+    
+    # BOM Table
+    doc.add_heading('3. BẢNG BÓC TÁCH KHỐI LƯỢNG VẬT TƯ (BOM)', level=1)
+    table = doc.add_table(rows=2, cols=4)
+    table.style = 'Table Grid'
+    hdr = table.rows[0].cells
+    hdr[0].text = 'STT'
+    hdr[1].text = 'Hạng mục Thiết bị & Vật tư'
+    hdr[2].text = 'Đơn vị'
+    hdr[3].text = 'Khối lượng'
+    
+    row = table.rows[1].cells
+    row[0].text = "{%tr for item in bom_items %}{{ item.stt }}"
+    row[1].text = "{{ item.name }}"
+    row[2].text = "{{ item.unit }}"
+    row[3].text = "{{ item.qty }}{%tr endfor %}"
+    
+    # Footer
+    footer = section.footer
+    footer.paragraphs[0].text = "Bản quyền thuộc về Riken Việt, không sao chép và sử dụng sai mục đích."
+    
+    stream = io.BytesIO()
+    doc.save(stream)
+    stream.seek(0)
+    return stream
+
+with st.sidebar:
+    st.header("🛠️ Công cụ sửa lỗi File Word")
+    st.info("Nếu báo cáo bị lỗi 'unknown tag', nguyên nhân do MS Word tự chèn mã ẩn làm gãy từ khóa. Hãy bấm nút dưới đây để tải File Mẫu Chuẩn (100% không dính lỗi).")
+    clean_docx = create_clean_template()
+    st.download_button("📥 TẢI FILE MẪU CHUẨN (Sạch lỗi XML)", clean_docx, "Mau_Bao_Cao.docx", type="primary")
+    st.caption("**Hướng dẫn:** Tải file này về -> Mở lên chèn Logo của công ty vào -> Lưu lại -> Tải đè lên GitHub là xong!")
+
+
+# --- TIẾP TỤC GIAO DIỆN CHÍNH ---
 st.title("🛡️ Riken Viet - Hệ thống Thiết kế & Dự toán Vùng phủ Khí")
 
 if 'room_data' not in st.session_state:
@@ -171,15 +237,13 @@ col_info1, col_info2, col_info3 = st.columns([1, 1, 1])
 
 with col_info1:
     project_name = st.text_input("Tên Dự án / Gói thầu", value="Thiết kế Hệ thống Giám sát Rò rỉ Khí")
-    author_name = st.text_input("Người lập báo cáo", value="Nguyễn Đình Trường Giang")
+    author_name = st.text_input("Người lập báo cáo", value="Cao Minh Lợi - Giám đốc Kỹ thuật")
 with col_info2:
     client_name = st.text_input("Đơn vị / Khách hàng", value="Nhà máy ABC")
     report_date = st.date_input("Ngày lập báo cáo")
 with col_info3:
-    # ĐIỂM CẬP NHẬT: Thêm trường nhập Số Báo cáo
-    report_number = st.text_input("Số Báo cáo (No.)", value="RKV_TE_001/BC", help="Chỉnh sửa số đuôi theo từng dự án")
+    report_number = st.text_input("Số Báo cáo (No.)", value="RKV_TE_001/BC")
 
-# TÍNH TOÁN BOM KỸ THUẬT
 bom_items = []
 bom_items.append({"STT": 1, "Hạng mục thiết bị": "Tủ điều khiển trung tâm đo khí", "Đơn vị": "Bộ", "Khối lượng": 1})
 
@@ -376,7 +440,6 @@ def generate_word_template(template_path, figs_dict, img_3d_bytes, bom_df, p_nam
             'img_2d': InlineImage(doc, img_stream, width=Inches(6.0))
         })
         
-    # ĐIỂM CẬP NHẬT: Nhồi biến report_number vào Template
     context = {
         'report_number': r_num,
         'project_name': p_name.upper(),
@@ -400,8 +463,8 @@ def generate_word_template(template_path, figs_dict, img_3d_bytes, bom_df, p_nam
 # ==========================================
 st.markdown("---")
 if st.button("📊 Chạy Mô phỏng Đồ họa & Tải Báo cáo Kỹ thuật", use_container_width=True, type='primary'):
-    if not os.path.exists("RKV_Baocao.docx"):
-        st.error("🚨 Lỗi: Hệ thống không tìm thấy file `RKV_Baocao.docx`. Vui lòng tạo file mẫu và tải lên kho GitHub của bạn trước khi xuất báo cáo!")
+    if not os.path.exists("Mau_Bao_Cao.docx"):
+        st.error("🚨 Không tìm thấy file `Mau_Bao_Cao.docx`. Vui lòng tải 'File Mẫu Chuẩn' ở cột bên trái, chèn logo và Upload lên GitHub!")
     elif room_poly is None or edited_dets.empty:
         st.warning("⚠️ Vui lòng nhập đủ tọa độ phòng và danh sách đầu dò!")
     else:
@@ -439,12 +502,11 @@ if st.button("📊 Chạy Mô phỏng Đồ họa & Tải Báo cáo Kỹ thuật
                                 st.warning(f"⚠️ Tỷ lệ bao phủ của {gas_name} chỉ đạt: {coverage:.1f}%")
                             generated_figs[gas_name] = {'fig': fig_2d, 'coverage': coverage}
                     
-                    # Gọi hàm với tham số số báo cáo
-                    word_stream = generate_word_template("RKV_Baocao.docx", generated_figs, img_3d_bytes, edited_bom, project_name, client_name, author_name, report_date, report_number)
+                    word_stream = generate_word_template("Mau_Bao_Cao.docx", generated_figs, img_3d_bytes, edited_bom, project_name, client_name, author_name, report_date, report_number)
                     st.download_button("📄 Tải Báo cáo chuẩn Form Công ty", word_stream, f"{report_number.replace('/','_')}_{client_name}.docx", type="primary")
 
         except Exception as e:
-            st.error(f"Lỗi hệ thống: {e}. Vui lòng kiểm tra lại thông số nhập liệu.")
+            st.error(f"Lỗi hệ thống: {e}. Vui lòng tải lại File Mẫu Chuẩn ở cột bên trái.")
 
 st.markdown("""
     <hr style="border: 0; height: 1px; background-image: linear-gradient(to right, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0)); margin-top: 50px;">
@@ -453,5 +515,3 @@ st.markdown("""
         Designed and programmed by <b>trggiang</b>.
     </div>
 """, unsafe_allow_html=True)
-
-
