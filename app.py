@@ -49,6 +49,7 @@ if 'obs_data' not in st.session_state:
 if 'auto_config' not in st.session_state:
     st.session_state.auto_config = pd.DataFrame([
         {"Target Gas": "CH4", "Layer": "Khí Nhẹ (Sát trần)", "Model": "SD-1 (Catalytic)", "Radius": 5.0, "Color": "cyan"},
+        {"Target Gas": "O2", "Layer": "Khí Trung bình (Vùng thở)", "Model": "OX-600", "Radius": 4.0, "Color": "lime"},
         {"Target Gas": "H2S", "Layer": "Khí Nặng (Sát sàn)", "Model": "GD-70D (Electro)", "Radius": 4.0, "Color": "magenta"}
     ])
 if 'det_data' not in st.session_state:
@@ -59,7 +60,10 @@ if 'det_data_2d' not in st.session_state:
 if 'obs_data_2d' not in st.session_state:
     st.session_state.obs_data_2d = pd.DataFrame([{"Type": "Box", "X": 15.0, "Y": 10.0, "Width_Radius": 5.0, "Length": 5.0, "Angle": 0}])
 if 'auto_config_2d' not in st.session_state:
-    st.session_state.auto_config_2d = pd.DataFrame([{"Target Gas": "CH4", "Model": "SD-1", "Radius": 5.0, "Color": "cyan"}])
+    st.session_state.auto_config_2d = pd.DataFrame([
+        {"Target Gas": "CH4", "Model": "SD-1", "Radius": 5.0, "Color": "cyan"},
+        {"Target Gas": "O2", "Model": "OX-600", "Radius": 4.0, "Color": "lime"}
+    ])
 
 
 # ==========================================
@@ -80,6 +84,15 @@ def create_obstacle_polys(df_obs):
             obs_polys.append(affinity.rotate(box, ang, origin='center'))
     return obs_polys
 
+def check_collision_shapely(df_dets, obs_polys):
+    collisions = []
+    if not obs_polys or df_dets.empty: return collisions
+    for _, det in df_dets.iterrows():
+        if pd.isna(det['X']) or pd.isna(det['Y']): continue
+        pt = Point(det['X'], det['Y'])
+        if any(poly.contains(pt) for poly in obs_polys): collisions.append(det['ID'])
+    return collisions
+
 def generate_2d_plot(room_poly, obs_polys, df_dets_group, gas_name, px, py, bg_img=None, b_w=0, b_h=0):
     minx, miny, maxx, maxy = room_poly.bounds
     res = 0.2
@@ -99,6 +112,7 @@ def generate_2d_plot(room_poly, obs_polys, df_dets_group, gas_name, px, py, bg_i
 
     for _, det in df_dets_group.iterrows():
         if pd.isna(det['X']) or pd.isna(det['Y']) or pd.isna(det['Radius']): continue
+        
         dx, dy, dr = det['X'], det['Y'], det['Radius']
         dist_sq = (pts_x - dx)**2 + (pts_y - dy)**2
         in_radius_mask = dist_sq <= dr**2
@@ -145,51 +159,37 @@ def generate_2d_plot(room_poly, obs_polys, df_dets_group, gas_name, px, py, bg_i
     ax.axis('equal'); ax.grid(True, linestyle=':', alpha=0.5)
     return fig, ty_le
 
-# ==========================================
-# KHÔI PHỤC VÀ NÂNG CẤP CHÚ THÍCH (LEGEND) CHO 3D
-# ==========================================
 def generate_plotly_3d_complex(room_poly, rz, obs_polys, df_obs, df_dets, px, py, pz):
     fig = go.Figure()
     rx, ry = room_poly.exterior.xy
     rx, ry = list(rx), list(ry)
     
-    # Gom nhóm Tường (Nhấp vào sẽ ẩn hết khung xưởng)
     fig.add_trace(go.Scatter3d(x=rx, y=ry, z=[0]*len(rx), mode='lines', line=dict(color='white', width=4), name='Khung nhà xưởng', legendgroup='wall'))
     fig.add_trace(go.Scatter3d(x=rx, y=ry, z=[rz]*len(rx), mode='lines', line=dict(color='white', width=4), legendgroup='wall', showlegend=False))
     for x, y in zip(rx[:-1], ry[:-1]):
         fig.add_trace(go.Scatter3d(x=[x,x], y=[y,y], z=[0,rz], mode='lines', line=dict(color='white', width=2), legendgroup='wall', showlegend=False))
 
-    # Tủ trung tâm
     fig.add_trace(go.Scatter3d(x=[px], y=[py], z=[pz], mode='markers+text', marker=dict(symbol='square', size=8, color='red'), text=["TỦ TRUNG TÂM"], textposition="top center", textfont=dict(color="red", size=12, weight="bold"), name="Tủ điều khiển"))
 
     def get_sphere(x0, y0, z0, r):
         u, v = np.mgrid[0:2*np.pi:15j, 0:np.pi:10j]
         return r*np.cos(u)*np.sin(v)+x0, r*np.sin(u)*np.sin(v)+y0, r*np.cos(v)+z0
 
-    # Gom nhóm Đầu dò và Bán kính theo từng loại Khí (Gas)
     added_gases = set()
     for _, det in df_dets.iterrows():
         if pd.isna(det['X']) or pd.isna(det['Y']) or pd.isna(det['Z']): continue
         hover_label = f"Model: {det['ID']}<br>Mục tiêu: {det['Gas']}<br>Cao độ Z: {det['Z']}m"
-        
-        # Chỉ hiện tên Khí 1 lần trên Legend
         show_leg = det['Gas'] not in added_gases
         
-        # Điểm đầu dò
         fig.add_trace(go.Scatter3d(x=[det['X']], y=[det['Y']], z=[det['Z']], mode='markers+text', marker=dict(size=6, color='white'), text=[f"{det['ID']}"], textposition="top center", textfont=dict(color="white", size=10), name=f"Phân hệ {det['Gas']}", hoverinfo="text", hovertext=hover_label, legendgroup=det['Gas'], showlegend=show_leg))
-        
-        # Bán kính bóng mờ
         sx, sy, sz = get_sphere(det['X'], det['Y'], det['Z'], det['Radius'])
         fig.add_trace(go.Surface(x=sx, y=sy, z=sz, opacity=0.15, showscale=False, colorscale=[[0, det['Color']], [1, det['Color']]], legendgroup=det['Gas'], showlegend=False, hoverinfo='skip'))
-        
         added_gases.add(det['Gas'])
 
-    # Gom nhóm Vật cản
     obs_leg_added = False
     for i, (_, obs) in enumerate(df_obs.iterrows()):
         if pd.isna(obs['X']) or pd.isna(obs['Y']) or pd.isna(obs['Width_Radius']): continue
         show_obs_leg = not obs_leg_added
-        
         if obs['Type'] == 'Cylinder':
             z_grid, theta = np.mgrid[0:obs.get('Height', 4):2j, 0:2*np.pi:20j]
             fig.add_trace(go.Surface(x=obs['Width_Radius']*np.cos(theta)+obs['X'], y=obs['Width_Radius']*np.sin(theta)+obs['Y'], z=z_grid, opacity=1.0, showscale=False, colorscale='Greys', name="Vật cản / Bồn chứa", legendgroup='obs', showlegend=show_obs_leg))
@@ -211,13 +211,7 @@ def generate_plotly_3d_complex(room_poly, rz, obs_polys, df_obs, df_dets, px, py
                    zaxis=dict(range=[0, max(rz, 5)], title='Z', backgroundcolor="rgb(30,30,30)", gridcolor="gray"),
                    aspectmode='data'),
         paper_bgcolor="rgb(15,15,15)", plot_bgcolor="rgb(15,15,15)", margin=dict(l=0, r=0, b=0, t=30),
-        
-        # BẬT LẠI LEGEND & TRANG TRÍ GÓC NHÌN CHUYÊN NGHIỆP
-        showlegend=True,
-        legend=dict(
-            yanchor="top", y=0.99, xanchor="left", x=0.01,
-            bgcolor="rgba(30, 30, 30, 0.7)", bordercolor="gray", borderwidth=1, font=dict(color="white")
-        )
+        showlegend=True, legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01, bgcolor="rgba(30, 30, 30, 0.7)", bordercolor="gray", borderwidth=1, font=dict(color="white"))
     )
     return fig
 
@@ -392,14 +386,21 @@ if app_mode == "1️⃣ Thiết kế Không gian Đa lớp (3D)":
         
         with st.expander("⚙️ Cấu hình Các Phân hệ Khí (Tự động rải)", expanded=True):
             edited_auto_config = st.data_editor(st.session_state.auto_config, num_rows="dynamic", use_container_width=True,
-                column_config={"Layer": st.column_config.SelectboxColumn("Mặt phẳng", options=["Khí Nhẹ (Sát trần)", "Khí Nặng (Sát sàn)"]), "Color": st.column_config.SelectboxColumn("Màu", options=["cyan", "magenta", "yellow", "lime", "red"])}, key="ed_cfg_3d")
+                column_config={
+                    "Layer": st.column_config.SelectboxColumn("Mặt phẳng", options=["Khí Nhẹ (Sát trần)", "Khí Trung bình (Vùng thở)", "Khí Nặng (Sát sàn)"]), 
+                    "Color": st.column_config.SelectboxColumn("Màu", options=["cyan", "magenta", "yellow", "lime", "red"])
+                }, key="ed_cfg_3d")
             st.session_state.auto_config = edited_auto_config
 
             if st.button("🚀 Tự động Rải Đầu dò (Mặt bằng 3D)", type="primary"):
                 if room_poly is not None:
                     new_dets = []
                     for _, row_cfg in edited_auto_config.iterrows():
-                        z_val = max(room_z - 0.5, 0.5) if "Nhẹ" in row_cfg["Layer"] else 0.5
+                        # Lọc cao độ Z thông minh
+                        if "Nhẹ" in row_cfg["Layer"]: z_val = max(room_z - 0.5, 0.5)
+                        elif "Nặng" in row_cfg["Layer"]: z_val = 0.5
+                        else: z_val = 1.5 # Khí trung bình (vùng thở)
+                        
                         spacing = row_cfg["Radius"] * 1.5 
                         minx, miny, maxx, maxy = room_poly.bounds
                         nx, ny = max(1, math.ceil((maxx - minx)/spacing)), max(1, math.ceil((maxy - miny)/spacing))
@@ -432,7 +433,7 @@ if app_mode == "1️⃣ Thiết kế Không gian Đa lớp (3D)":
     with col_info2: client_name = st.text_input("Khách hàng", value="Nhà máy ABC", key="cn_1")
     with col_info3: report_number = st.text_input("Số Báo cáo", value="RKV_TE_001/BC", key="rn_1")
     
-    author_name = st.text_input("Người lập báo cáo", value="Nguyễn Đình Trường Giang", key="au_1")
+    author_name = st.text_input("Người lập báo cáo", value="Cao Minh Lợi - Giám đốc Kỹ thuật", key="au_1")
     report_date = st.date_input("Ngày lập báo cáo", key="rd_1")
 
     if st.button("🚀 CHẠY MÔ PHỎNG & TẠO FILE BÁO CÁO (3D)", type='primary', use_container_width=True):
@@ -530,7 +531,7 @@ elif app_mode == "2️⃣ Rải nhanh trên Bản vẽ 2D (Overlay)":
     with col_info2: client_name = st.text_input("Khách hàng", value="Nhà máy ABC", key="cn_2")
     with col_info3: report_number = st.text_input("Số Báo cáo", value="RKV_TE_001/BC", key="rn_2")
     
-    author_name = st.text_input("Người lập báo cáo", value="Nguyễn Đình Trường Giang", key="au_2")
+    author_name = st.text_input("Người lập báo cáo", value="Cao Minh Lợi - Giám đốc Kỹ thuật", key="au_2")
     report_date = st.date_input("Ngày lập báo cáo", key="rd_2")
 
     if st.button("🚀 CHẠY MÔ PHỎNG & TẠO FILE BÁO CÁO (2D)", type='primary', use_container_width=True):
