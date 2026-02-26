@@ -6,6 +6,7 @@ import plotly.graph_objects as go
 import matplotlib.colors as mcolors
 import math
 import io
+import os
 
 from docx import Document
 from docx.shared import Inches, Pt, RGBColor
@@ -18,14 +19,7 @@ from matplotlib.path import Path
 # CẤU HÌNH TRANG WEB & STATE
 # ==========================================
 st.set_page_config(page_title="Riken Viet - Enterprise Gas Mapping", layout="wide")
-
-# --- THANH CÔNG CỤ SIDEBAR: TẢI LOGO ---
-with st.sidebar:
-    st.header("🖼️ Logo Nhận diện Thương hiệu")
-    st.info("Tải lên Logo công ty (PNG/JPG). Hệ thống sẽ tự động đóng dấu ảnh này vào Header của mọi trang trên Báo cáo Word.")
-    uploaded_logo = st.file_uploader("Chọn file ảnh Logo", type=['png', 'jpg', 'jpeg'])
-
-st.title("🛡️ Riken Viet - Hệ thống Thiết kế & Dự toán Vùng phủ Khí")
+st.title("🛡️ Riken Viet - Hệ thống Thiết kế & Dự toán Vùng phủ Khí - 3D (Beta)")
 
 if 'room_data' not in st.session_state:
     st.session_state.room_data = pd.DataFrame({"X": [0, 15, 15, 0], "Y": [0, 0, 10, 10]}) 
@@ -179,7 +173,7 @@ col_info1, col_info2, col_info3 = st.columns([1, 1, 1])
 
 with col_info1:
     project_name = st.text_input("Tên Dự án / Gói thầu", value="Thiết kế Hệ thống Giám sát Rò rỉ Khí")
-    author_name = st.text_input("Người lập báo cáo", value="Cao Minh Lợi - Giám đốc Kỹ thuật")
+    author_name = st.text_input("Người lập báo cáo", value="Nguyễn Đình Trường Giang")
 with col_info2:
     client_name = st.text_input("Đơn vị / Khách hàng", value="Nhà máy ABC")
     report_date = st.date_input("Ngày lập báo cáo")
@@ -354,32 +348,29 @@ def generate_plotly_3d_complex(room_poly, rz, obs_polys, df_obs, df_dets, px, py
 
 
 # ==========================================
-# CÔNG NGHỆ TỰ ĐỘNG SINH WORD KÈM LOGO
+# CÔNG NGHỆ TỰ ĐỘNG SINH WORD (TÍCH HỢP LOGO MẶC ĐỊNH)
 # ==========================================
-def generate_full_word_report(figs_dict, img_3d_bytes, bom_df, p_name, c_name, author, r_date, r_num, logo_file_bytes):
+def generate_full_word_report(figs_dict, img_3d_bytes, bom_df, p_name, c_name, author, r_date, r_num):
     doc = Document()
     
     style = doc.styles['Normal']
     style.font.name = 'Arial'
     style.font.size = Pt(12)
 
-    # 1. HEADER (Có chèn Logo nếu được upload)
+    # 1. HEADER (Lấy ảnh từ GitHub)
     section = doc.sections[0]
     header = section.header
     h_para = header.paragraphs[0]
-    h_para.alignment = WD_ALIGN_PARAGRAPH.CENTER # Căn giữa Header
+    h_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
     
-    # Chèn Logo vào Header
-    if logo_file_bytes:
+    # Kiểm tra xem bạn đã upload file header_logo.png lên GitHub chưa
+    logo_path = "header_logo.png"
+    if os.path.exists(logo_path):
         run_logo = h_para.add_run()
-        run_logo.add_picture(logo_file_bytes, width=Inches(1.5))
-        h_para.add_run("\n") # Xuống dòng để viết chữ
-        
-    # Chữ trong Header
-    run_text = h_para.add_run(f"CÔNG TY TNHH CÔNG NGHỆ THIẾT BỊ DÒ KHÍ RIKEN VIET\nSố/ No.: {r_num}")
-    run_text.font.name = 'Arial'
-    run_text.font.size = Pt(10)
-    run_text.font.bold = True
+        run_logo.add_picture(logo_path, width=Inches(6.5)) # Kéo dài bằng lề trang giấy A4
+    else:
+        # Nếu chưa có ảnh, hiện tạm chữ
+        h_para.add_run("CÔNG TY TNHH CÔNG NGHỆ THIẾT BỊ DÒ KHÍ RIKEN VIET").bold = True
     
     # 2. FOOTER (Bản quyền)
     footer = section.footer
@@ -392,12 +383,20 @@ def generate_full_word_report(figs_dict, img_3d_bytes, bom_df, p_name, c_name, a
         run.font.italic = True
         run.font.color.rgb = RGBColor(128, 128, 128)
 
-    # 3. TIÊU ĐỀ & THÔNG TIN DỰ ÁN
+    # 3. TIÊU ĐỀ & SỐ BÁO CÁO
     doc.add_paragraph() # Cách một dòng với Header
+    
     title = doc.add_heading('BÁO CÁO THIẾT KẾ VÀ DỰ TOÁN HỆ THỐNG ĐO KHÍ', 0)
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
     for run in title.runs: run.font.name = 'Arial'
     
+    # Số Báo Cáo - Lệch phải, in nghiêng
+    p_num = doc.add_paragraph(f"Số/ No.: {r_num}")
+    p_num.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    for run in p_num.runs:
+        run.font.name = 'Arial'
+        run.font.italic = True
+        
     doc.add_paragraph(f"Tên Dự án: {p_name}").runs[0].font.bold = True
     doc.add_paragraph(f"Đơn vị / Khách hàng: {c_name}").runs[0].font.bold = True
     doc.add_paragraph(f"Người lập báo cáo: {author}")
@@ -503,15 +502,10 @@ if st.button("📊 Chạy Mô phỏng Đồ họa & Tải Báo cáo Kỹ thuật
                             else:
                                 st.warning(f"⚠️ Tỷ lệ bao phủ của {gas_name} chỉ đạt: {coverage:.1f}%")
                             generated_figs[gas_name] = {'fig': fig_2d, 'coverage': coverage}
-                    
-                    # Xử lý Logo
-                    logo_bytes_io = None
-                    if uploaded_logo is not None:
-                        logo_bytes_io = io.BytesIO(uploaded_logo.getvalue())
 
-                    # Gọi hàm sinh Word trực tiếp, không dùng Template
-                    word_stream = generate_full_word_report(generated_figs, img_3d_bytes, edited_bom, project_name, client_name, author_name, report_date, report_number, logo_bytes_io)
-                    st.download_button("📄 Tải Báo cáo Chuẩn Form Công ty", word_stream, f"{report_number.replace('/','_')}_{client_name}.docx", type="primary")
+                    # Gọi hàm sinh Word trực tiếp
+                    word_stream = generate_full_word_report(generated_figs, img_3d_bytes, edited_bom, project_name, client_name, author_name, report_date, report_number)
+                    st.download_button("📄 Tải Báo cáo ", word_stream, f"{report_number.replace('/','_')}_{client_name}.docx", type="primary")
 
         except Exception as e:
             st.error(f"Lỗi hệ thống: {e}")
