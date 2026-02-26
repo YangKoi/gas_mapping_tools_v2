@@ -301,7 +301,7 @@ def generate_full_word_report(figs_dict, img_3d_bytes, bom_df, p_name, c_name, a
 # LUỒNG CHÍNH 1: MÔ PHỎNG 3D CHUYÊN SÂU
 # ==========================================
 if app_mode == "1️⃣ Thiết kế Không gian Đa lớp (3D)":
-    st.markdown("## 🚀 Chế độ Thiết kế Không gian 3D Chuyên sâu")
+    st.markdown("## Chế độ Thiết kế Không gian 3D Chuyên sâu")
     
     col_input1, col_input2 = st.columns([1.2, 1.1])
     with col_input1:
@@ -397,7 +397,7 @@ if app_mode == "1️⃣ Thiết kế Không gian Đa lớp (3D)":
     with col_info2: client_name = st.text_input("Khách hàng", value="Nhà máy ABC", key="cn_1")
     with col_info3: report_number = st.text_input("Số Báo cáo", value="RKV_TE_001/BC", key="rn_1")
     
-    author_name = st.text_input("Người lập báo cáo", value="Cao Minh Lợi - Giám đốc Kỹ thuật", key="au_1")
+    author_name = st.text_input("Người lập báo cáo", value="Nguyễn Đình Trường Giang", key="au_1")
     report_date = st.date_input("Ngày lập báo cáo", key="rd_1")
 
     if st.button("🚀 CHẠY MÔ PHỎNG & TẠO FILE BÁO CÁO (3D)", type='primary', use_container_width=True):
@@ -441,7 +441,7 @@ if app_mode == "1️⃣ Thiết kế Không gian Đa lớp (3D)":
 # LUỒNG CHÍNH 2: RẢI NHANH TRÊN BẢN VẼ 2D
 # ==========================================
 elif app_mode == "2️⃣ Rải nhanh trên Bản vẽ 2D (Overlay)":
-    st.markdown("## 🖼️ Chế độ Rải nhanh trên Bản vẽ 2D (Overlay)")
+    st.markdown("## Chế độ Rải nhanh trên Bản vẽ 2D (Overlay)")
     
     col_2d_1, col_2d_2 = st.columns([1.2, 1.1])
     
@@ -534,3 +534,4 @@ st.markdown("""
         Designed and programmed by <b>trggiang</b>.
     </div>
 """, unsafe_allow_html=True)
+
