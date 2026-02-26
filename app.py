@@ -99,7 +99,6 @@ def generate_2d_plot(room_poly, obs_polys, df_dets_group, gas_name, px, py, bg_i
 
     for _, det in df_dets_group.iterrows():
         if pd.isna(det['X']) or pd.isna(det['Y']) or pd.isna(det['Radius']): continue
-        
         dx, dy, dr = det['X'], det['Y'], det['Radius']
         dist_sq = (pts_x - dx)**2 + (pts_y - dy)**2
         in_radius_mask = dist_sq <= dr**2
@@ -146,34 +145,55 @@ def generate_2d_plot(room_poly, obs_polys, df_dets_group, gas_name, px, py, bg_i
     ax.axis('equal'); ax.grid(True, linestyle=':', alpha=0.5)
     return fig, ty_le
 
+# ==========================================
+# KHÔI PHỤC VÀ NÂNG CẤP CHÚ THÍCH (LEGEND) CHO 3D
+# ==========================================
 def generate_plotly_3d_complex(room_poly, rz, obs_polys, df_obs, df_dets, px, py, pz):
     fig = go.Figure()
     rx, ry = room_poly.exterior.xy
     rx, ry = list(rx), list(ry)
     
-    fig.add_trace(go.Scatter3d(x=rx, y=ry, z=[0]*len(rx), mode='lines', line=dict(color='white', width=4), name='Đáy tường'))
-    fig.add_trace(go.Scatter3d(x=rx, y=ry, z=[rz]*len(rx), mode='lines', line=dict(color='white', width=4), name='Đỉnh tường'))
+    # Gom nhóm Tường (Nhấp vào sẽ ẩn hết khung xưởng)
+    fig.add_trace(go.Scatter3d(x=rx, y=ry, z=[0]*len(rx), mode='lines', line=dict(color='white', width=4), name='Khung nhà xưởng', legendgroup='wall'))
+    fig.add_trace(go.Scatter3d(x=rx, y=ry, z=[rz]*len(rx), mode='lines', line=dict(color='white', width=4), legendgroup='wall', showlegend=False))
     for x, y in zip(rx[:-1], ry[:-1]):
-        fig.add_trace(go.Scatter3d(x=[x,x], y=[y,y], z=[0,rz], mode='lines', line=dict(color='white', width=2), showlegend=False))
+        fig.add_trace(go.Scatter3d(x=[x,x], y=[y,y], z=[0,rz], mode='lines', line=dict(color='white', width=2), legendgroup='wall', showlegend=False))
 
-    fig.add_trace(go.Scatter3d(x=[px], y=[py], z=[pz], mode='markers+text', marker=dict(symbol='square', size=8, color='red'), text=["TỦ TRUNG TÂM"], textposition="top center", textfont=dict(color="red", size=12, weight="bold"), name="Control Panel"))
+    # Tủ trung tâm
+    fig.add_trace(go.Scatter3d(x=[px], y=[py], z=[pz], mode='markers+text', marker=dict(symbol='square', size=8, color='red'), text=["TỦ TRUNG TÂM"], textposition="top center", textfont=dict(color="red", size=12, weight="bold"), name="Tủ điều khiển"))
 
     def get_sphere(x0, y0, z0, r):
         u, v = np.mgrid[0:2*np.pi:15j, 0:np.pi:10j]
         return r*np.cos(u)*np.sin(v)+x0, r*np.sin(u)*np.sin(v)+y0, r*np.cos(v)+z0
 
+    # Gom nhóm Đầu dò và Bán kính theo từng loại Khí (Gas)
+    added_gases = set()
     for _, det in df_dets.iterrows():
         if pd.isna(det['X']) or pd.isna(det['Y']) or pd.isna(det['Z']): continue
         hover_label = f"Model: {det['ID']}<br>Mục tiêu: {det['Gas']}<br>Cao độ Z: {det['Z']}m"
-        fig.add_trace(go.Scatter3d(x=[det['X']], y=[det['Y']], z=[det['Z']], mode='markers+text', marker=dict(size=6, color='white'), text=[f"{det['ID']}<br>({det['Gas']})"], textposition="top center", textfont=dict(color="white", size=10), name=det['ID'], hoverinfo="text", hovertext=hover_label))
+        
+        # Chỉ hiện tên Khí 1 lần trên Legend
+        show_leg = det['Gas'] not in added_gases
+        
+        # Điểm đầu dò
+        fig.add_trace(go.Scatter3d(x=[det['X']], y=[det['Y']], z=[det['Z']], mode='markers+text', marker=dict(size=6, color='white'), text=[f"{det['ID']}"], textposition="top center", textfont=dict(color="white", size=10), name=f"Phân hệ {det['Gas']}", hoverinfo="text", hovertext=hover_label, legendgroup=det['Gas'], showlegend=show_leg))
+        
+        # Bán kính bóng mờ
         sx, sy, sz = get_sphere(det['X'], det['Y'], det['Z'], det['Radius'])
-        fig.add_trace(go.Surface(x=sx, y=sy, z=sz, opacity=0.15, showscale=False, colorscale=[[0, det['Color']], [1, det['Color']]]))
+        fig.add_trace(go.Surface(x=sx, y=sy, z=sz, opacity=0.15, showscale=False, colorscale=[[0, det['Color']], [1, det['Color']]], legendgroup=det['Gas'], showlegend=False, hoverinfo='skip'))
+        
+        added_gases.add(det['Gas'])
 
+    # Gom nhóm Vật cản
+    obs_leg_added = False
     for i, (_, obs) in enumerate(df_obs.iterrows()):
         if pd.isna(obs['X']) or pd.isna(obs['Y']) or pd.isna(obs['Width_Radius']): continue
+        show_obs_leg = not obs_leg_added
+        
         if obs['Type'] == 'Cylinder':
             z_grid, theta = np.mgrid[0:obs.get('Height', 4):2j, 0:2*np.pi:20j]
-            fig.add_trace(go.Surface(x=obs['Width_Radius']*np.cos(theta)+obs['X'], y=obs['Width_Radius']*np.sin(theta)+obs['Y'], z=z_grid, opacity=1.0, showscale=False, colorscale='Greys', name="Bồn trụ"))
+            fig.add_trace(go.Surface(x=obs['Width_Radius']*np.cos(theta)+obs['X'], y=obs['Width_Radius']*np.sin(theta)+obs['Y'], z=z_grid, opacity=1.0, showscale=False, colorscale='Greys', name="Vật cản / Bồn chứa", legendgroup='obs', showlegend=show_obs_leg))
+            obs_leg_added = True
         elif obs['Type'] == 'Box':
             box_2d = obs_polys[i]
             bx, by = box_2d.exterior.xy
@@ -181,7 +201,8 @@ def generate_plotly_3d_complex(room_poly, rz, obs_polys, df_obs, df_dets, px, py
             x_box, y_box = bx * 2, by * 2
             z_box = [0]*4 + [obs.get('Height', 4)]*4
             ii, jj, kk = [7,0,0,0,4,4,6,6,4,0,3,2], [3,4,1,2,5,6,5,2,0,1,6,3], [0,7,2,3,6,7,1,1,5,5,7,6]
-            fig.add_trace(go.Mesh3d(x=x_box, y=y_box, z=z_box, i=ii, j=jj, k=kk, color='gray', opacity=1.0, name="Tủ/Kệ"))
+            fig.add_trace(go.Mesh3d(x=x_box, y=y_box, z=z_box, i=ii, j=jj, k=kk, color='gray', opacity=1.0, name="Vật cản / Bồn chứa", legendgroup='obs', showlegend=show_obs_leg))
+            obs_leg_added = True
 
     minx, miny, maxx, maxy = room_poly.bounds
     fig.update_layout(
@@ -189,7 +210,14 @@ def generate_plotly_3d_complex(room_poly, rz, obs_polys, df_obs, df_dets, px, py
                    yaxis=dict(range=[miny, maxy], title='Y', backgroundcolor="rgb(30,30,30)", gridcolor="gray"),
                    zaxis=dict(range=[0, max(rz, 5)], title='Z', backgroundcolor="rgb(30,30,30)", gridcolor="gray"),
                    aspectmode='data'),
-        paper_bgcolor="rgb(15,15,15)", plot_bgcolor="rgb(15,15,15)", margin=dict(l=0, r=0, b=0, t=30), showlegend=False
+        paper_bgcolor="rgb(15,15,15)", plot_bgcolor="rgb(15,15,15)", margin=dict(l=0, r=0, b=0, t=30),
+        
+        # BẬT LẠI LEGEND & TRANG TRÍ GÓC NHÌN CHUYÊN NGHIỆP
+        showlegend=True,
+        legend=dict(
+            yanchor="top", y=0.99, xanchor="left", x=0.01,
+            bgcolor="rgba(30, 30, 30, 0.7)", bordercolor="gray", borderwidth=1, font=dict(color="white")
+        )
     )
     return fig
 
@@ -324,7 +352,6 @@ if app_mode == "1️⃣ Thiết kế Không gian Đa lớp (3D)":
 
         edited_room = st.data_editor(st.session_state.room_data, num_rows="dynamic", use_container_width=True, key="ed_room_3d")
         
-        # BẢN VẼ PREVIEW CẬP NHẬT TỪ SESSION STATE (Đã lưu sau khi bấm nút Update)
         if len(edited_room) >= 3:
             room_poly = Polygon(list(zip(edited_room['X'], edited_room['Y'])))
             fig_grid, ax_grid = plt.subplots(figsize=(6, 5))
@@ -363,7 +390,6 @@ if app_mode == "1️⃣ Thiết kế Không gian Đa lớp (3D)":
     with col_input2:
         st.header("2. Bố trí Thiết bị & Khí (3D)")
         
-        # Phần Tự động rải (Nằm ngoài form để có thể tác động ngay lập tức)
         with st.expander("⚙️ Cấu hình Các Phân hệ Khí (Tự động rải)", expanded=True):
             edited_auto_config = st.data_editor(st.session_state.auto_config, num_rows="dynamic", use_container_width=True,
                 column_config={"Layer": st.column_config.SelectboxColumn("Mặt phẳng", options=["Khí Nhẹ (Sát trần)", "Khí Nặng (Sát sàn)"]), "Color": st.column_config.SelectboxColumn("Màu", options=["cyan", "magenta", "yellow", "lime", "red"])}, key="ed_cfg_3d")
@@ -386,7 +412,6 @@ if app_mode == "1️⃣ Thiết kế Không gian Đa lớp (3D)":
                     st.session_state.det_data = pd.DataFrame(new_dets)
                     st.rerun()
 
-        # FORM ĐÓNG GÓI CHỐNG LAG: CHỈ CẬP NHẬT KHI BẤM NÚT
         with st.form("form_edit_3d"):
             st.write("🚧 **Danh sách Vật cản (Cylinder / Box)**")
             edited_obs = st.data_editor(st.session_state.obs_data, num_rows="dynamic", use_container_width=True, column_config={"Type": st.column_config.SelectboxColumn("Loại", options=["Cylinder", "Box"])}, key="ed_obs_3d")
@@ -415,7 +440,6 @@ if app_mode == "1️⃣ Thiết kế Không gian Đa lớp (3D)":
             st.error("Lỗi: Cần vẽ phòng và rải đầu dò (nhớ bấm nút Cập nhật) trước khi chạy!")
         else:
             with st.spinner('Đang nội suy không gian 3D và kết xuất báo cáo...'):
-                # Sử dụng dữ liệu trực tiếp từ Session State (Đã an toàn qua Form)
                 obs_polys = create_obstacle_polys(st.session_state.obs_data)
                 
                 fig_3d = generate_plotly_3d_complex(room_poly, room_z, obs_polys, st.session_state.obs_data, st.session_state.det_data, panel_x, panel_y, panel_z)
@@ -486,7 +510,6 @@ elif app_mode == "2️⃣ Rải nhanh trên Bản vẽ 2D (Overlay)":
                 st.session_state.det_data_2d = pd.DataFrame(new_dets_2d)
                 st.rerun()
 
-        # FORM ĐÓNG GÓI CHỐNG LAG (TAB 2)
         with st.form("form_edit_2d"):
             st.write("📋 **Tọa độ Thiết bị (Chỉnh tay nếu đè lên vật cản):**")
             edited_dets_2d = st.data_editor(st.session_state.det_data_2d, num_rows="dynamic", use_container_width=True, key="ed_dets_2d_manual")
