@@ -19,21 +19,33 @@ from matplotlib.path import Path
 # ==========================================
 # CẤU HÌNH TRANG WEB & STATE
 # ==========================================
-st.set_page_config(page_title="Riken Viet - Enterprise Gas Mapping", layout="wide")
+st.set_page_config(page_title="Riken Viet - Enterprise Gas Mapping", layout="wide", initial_sidebar_state="expanded")
 
+# --- ĐIỀU HƯỚNG BẰNG SIDEBAR (MENU TRÁI) ---
 with st.sidebar:
-    st.header("🖼️ Logo Nhận diện Thương hiệu")
-    st.info("Hãy đổi tên Logo của công ty thành `header_logo.png` và tải lên kho GitHub. Hệ thống sẽ tự động đóng dấu vào góc báo cáo.")
+    # Hiển thị Logo nếu có
+    if os.path.exists("header_logo.png"):
+        st.image("header_logo.png", use_container_width=True)
+    else:
+        st.markdown("### RIKEN VIET")
+        
+    st.header("🔄 BẢNG ĐIỀU KHIỂN")
+    app_mode = st.radio("Chọn luồng công việc:", [
+        "1️⃣ Thiết kế Không gian Đa lớp (3D)",
+        "2️⃣ Rải nhanh trên Bản vẽ 2D (Overlay)"
+    ])
     
+    st.markdown("---")
+    st.info("💡 **Mẹo:** Thu gọn thanh này bằng dấu 'X' hoặc phím tắt để mở rộng tối đa vùng thiết kế bản vẽ.")
+
 st.title("🛡️ Riken Viet - Hệ thống Thiết kế & Dự toán Vùng phủ Khí")
 
-# --- KHỞI TẠO DỮ LIỆU TAB 1 (3D CHUYÊN SÂU) ---
+# --- KHỞI TẠO DỮ LIỆU ---
+# Dữ liệu Mode 1 (3D)
 if 'room_data' not in st.session_state:
     st.session_state.room_data = pd.DataFrame({"X": [0, 15, 15, 0], "Y": [0, 0, 10, 10]}) 
 if 'obs_data' not in st.session_state:
-    st.session_state.obs_data = pd.DataFrame([
-        {"Type": "Cylinder", "X": 7.5, "Y": 5.0, "Width_Radius": 1.5, "Length": 0.0, "Height": 4.0, "Angle": 0}
-    ])
+    st.session_state.obs_data = pd.DataFrame([{"Type": "Cylinder", "X": 7.5, "Y": 5.0, "Width_Radius": 1.5, "Length": 0.0, "Height": 4.0, "Angle": 0}])
 if 'auto_config' not in st.session_state:
     st.session_state.auto_config = pd.DataFrame([
         {"Target Gas": "CH4", "Layer": "Khí Nhẹ (Sát trần)", "Model": "SD-1 (Catalytic)", "Radius": 5.0, "Color": "cyan"},
@@ -42,220 +54,17 @@ if 'auto_config' not in st.session_state:
 if 'det_data' not in st.session_state:
     st.session_state.det_data = pd.DataFrame(columns=["ID", "Model", "Gas", "X", "Y", "Z", "Radius", "Color"])
 
-# --- KHỞI TẠO DỮ LIỆU TAB 2 (BẢN VẼ 2D) ---
+# Dữ liệu Mode 2 (2D Overlay)
 if 'det_data_2d' not in st.session_state:
     st.session_state.det_data_2d = pd.DataFrame(columns=["ID", "Model", "Gas", "X", "Y", "Radius", "Color"])
 if 'obs_data_2d' not in st.session_state:
-    st.session_state.obs_data_2d = pd.DataFrame([
-        {"Type": "Box", "X": 15.0, "Y": 10.0, "Width_Radius": 5.0, "Length": 5.0, "Angle": 0}
-    ])
+    st.session_state.obs_data_2d = pd.DataFrame([{"Type": "Box", "X": 15.0, "Y": 10.0, "Width_Radius": 5.0, "Length": 5.0, "Angle": 0}])
 if 'auto_config_2d' not in st.session_state:
-    st.session_state.auto_config_2d = pd.DataFrame([
-        {"Target Gas": "CH4", "Model": "SD-1", "Radius": 5.0, "Color": "cyan"}
-    ])
-
-# ==========================================
-# GIAO DIỆN CHÍNH: CHIA 2 TABS
-# ==========================================
-tab1, tab2 = st.tabs(["🚀 Tab 1: Thiết kế Không gian Đa lớp (3D Chuyên sâu)", "🖼️ Tab 2: Rải nhanh trên Bản vẽ 2D (Quick Overlay)"])
-
-# ---------------------------------------------------------
-# TAB 1: PHỤC HỒI 100% CẤU TRÚC GIAO DIỆN 3D
-# ---------------------------------------------------------
-with tab1:
-    col_input1, col_input2 = st.columns([1.2, 1.1])
-
-    with col_input1:
-        st.header("1. Không gian & Tủ Trung Tâm")
-        room_z = st.number_input("Chiều cao trần nhà xưởng (Z) - mét", min_value=1.0, value=5.0, key="z_3d")
-
-        st.subheader("🎛️ Vị trí Tủ Điều Khiển & Hao hụt")
-        col_p1, col_p2, col_p3 = st.columns(3)
-        panel_x = col_p1.number_input("Tọa độ X (Tủ)", value=0.0, key="px_3d")
-        panel_y = col_p2.number_input("Tọa độ Y (Tủ)", value=0.0, key="py_3d")
-        panel_z = col_p3.number_input("Cao độ Z (Tủ)", value=1.5, key="pz_3d")
-        wastage_percent = st.number_input("Hệ số hao hụt cáp thi công (%)", min_value=0, value=20, step=5, key="wast_3d")
-
-        st.subheader("📐 Định hình Không gian (Tự động chuẩn xác)")
-        col_t1, col_t2, col_t3 = st.columns(3)
-        with col_t1:
-            if st.button("🟩 Mẫu Chữ Nhật", use_container_width=True, key="btn_rect"):
-                st.session_state.room_data = pd.DataFrame({"X": [0, 15, 15, 0], "Y": [0, 0, 10, 10]})
-                st.rerun()
-        with col_t2:
-            if st.button("▛ Mẫu Chữ L", use_container_width=True, key="btn_l"):
-                st.session_state.room_data = pd.DataFrame({"X": [0, 15, 15, 6, 6, 0], "Y": [0, 0, 6, 6, 12, 12]})
-                st.rerun()
-        with col_t3:
-            if st.button("⨆ Mẫu Chữ U", use_container_width=True, key="btn_u"):
-                st.session_state.room_data = pd.DataFrame({"X": [0, 20, 20, 15, 15, 5, 5, 0], "Y": [0, 0, 15, 15, 5, 5, 15, 15]})
-                st.rerun()
-
-        edited_room = st.data_editor(st.session_state.room_data, num_rows="dynamic", use_container_width=True, key="ed_room_3d")
-        
-        if len(edited_room) >= 3:
-            room_coords = list(zip(edited_room['X'], edited_room['Y']))
-            room_poly = Polygon(room_coords)
-            
-            fig_grid, ax_grid = plt.subplots(figsize=(6, 5))
-            x_ext, y_ext = room_poly.exterior.xy
-            ax_grid.plot(x_ext, y_ext, color='#333333', linewidth=2)
-            ax_grid.fill(x_ext, y_ext, alpha=0.1, color='blue')
-            
-            for idx, row in edited_room.iterrows():
-                ax_grid.plot(row['X'], row['Y'], 'ro', markersize=6, zorder=10)
-                ax_grid.text(row['X'] + 0.3, row['Y'] + 0.3, f"P{idx}", color='red', fontweight='bold', fontsize=11, zorder=11)
-            
-            ax_grid.plot(panel_x, panel_y, 's', color='red', markersize=12, markeredgecolor='black', zorder=12)
-            ax_grid.text(panel_x + 0.5, panel_y + 0.5, "TỦ TT", color='red', fontweight='bold', zorder=12)
-
-            for _, obs in st.session_state.obs_data.iterrows():
-                if obs['Type'] == 'Cylinder':
-                    c = plt.Circle((obs['X'], obs['Y']), obs['Width_Radius'], color='gray', alpha=0.5)
-                    ax_grid.add_patch(c)
-                elif obs['Type'] == 'Box':
-                    w, l = obs['Width_Radius'], obs['Length']
-                    box = Polygon([(obs['X']-w/2, obs['Y']-l/2), (obs['X']+w/2, obs['Y']-l/2),
-                                   (obs['X']+w/2, obs['Y']+l/2), (obs['X']-w/2, obs['Y']+l/2)])
-                    box = affinity.rotate(box, obs.get('Angle', 0), origin='center')
-                    bx, by = box.exterior.xy
-                    ax_grid.fill(bx, by, color='gray', alpha=0.5)
-                    
-            valid_colors = mcolors.CSS4_COLORS
-            for _, det in st.session_state.det_data.iterrows():
-                c = det['Color'].lower()
-                use_c = c if c in valid_colors else 'blue'
-                ax_grid.plot(det['X'], det['Y'], '^', color=use_c, markersize=8, markeredgecolor='black')
-
-            ax_grid.set_aspect('equal')
-            ax_grid.grid(True, linestyle='--', alpha=0.5)
-            st.pyplot(fig_grid)
-        else:
-            st.error("Phòng cần ít nhất 3 góc (tọa độ)!")
-            room_poly = None
-
-    with col_input2:
-        st.header("2. Bố trí Thiết bị & Khí (3D)")
-        
-        with st.expander("🚧 Danh sách Vật cản (Cylinder / Box)", expanded=True):
-            edited_obs = st.data_editor(st.session_state.obs_data, num_rows="dynamic", use_container_width=True,
-                                        column_config={"Type": st.column_config.SelectboxColumn("Loại", options=["Cylinder", "Box"])}, key="ed_obs_3d")
-            st.session_state.obs_data = edited_obs
-
-        with st.expander("⚙️ Cấu hình Các Phân hệ Khí", expanded=True):
-            edited_auto_config = st.data_editor(st.session_state.auto_config, num_rows="dynamic", use_container_width=True,
-                column_config={
-                    "Layer": st.column_config.SelectboxColumn("Mặt phẳng", options=["Khí Nhẹ (Sát trần)", "Khí Trung bình (Vùng thở)", "Khí Nặng (Sát sàn)"]),
-                    "Color": st.column_config.SelectboxColumn("Màu bản đồ", options=["cyan", "magenta", "yellow", "lime", "red", "blue", "orange"])
-                }, key="ed_cfg_3d")
-            st.session_state.auto_config = edited_auto_config
-
-            if st.button("🚀 Tự động Rải Đầu dò (Mặt bằng 3D)", type="primary"):
-                if room_poly is not None:
-                    new_dets = []
-                    for _, row_cfg in edited_auto_config.iterrows():
-                        if "Nhẹ" in row_cfg["Layer"]: z_val = max(room_z - 0.5, 0.5)
-                        elif "Nặng" in row_cfg["Layer"]: z_val = 0.5
-                        else: z_val = 1.5
-                        
-                        spacing = row_cfg["Radius"] * 1.5 
-                        minx, miny, maxx, maxy = room_poly.bounds
-                        nx = max(1, math.ceil((maxx - minx) / spacing))
-                        ny = max(1, math.ceil((maxy - miny) / spacing))
-                        
-                        x_steps = np.linspace(minx + (maxx-minx)/(2*nx), maxx - (maxx-minx)/(2*nx), nx)
-                        y_steps = np.linspace(miny + (maxy-miny)/(2*ny), maxy - (maxy-miny)/(2*ny), ny)
-                        
-                        count = 1
-                        for x in x_steps:
-                            for y in y_steps:
-                                pt = Point(x, y)
-                                if room_poly.contains(pt): 
-                                    new_dets.append({
-                                        "ID": f"{row_cfg['Model']} ({count:02d})", 
-                                        "Model": row_cfg['Model'], 
-                                        "Gas": f"{row_cfg['Target Gas']} ({row_cfg['Layer'].split(' ')[1]})", 
-                                        "X": round(x, 1), "Y": round(y, 1),
-                                        "Z": z_val, "Radius": row_cfg["Radius"], "Color": row_cfg["Color"]
-                                    })
-                                    count += 1
-                    
-                    st.session_state.det_data = pd.DataFrame(new_dets)
-                    st.rerun()
-
-        st.write("📋 **Bảng Tọa độ Đầu dò Thực tế:**")
-        edited_dets = st.data_editor(st.session_state.det_data, num_rows="dynamic", use_container_width=True, key="ed_dets_3d")
-        st.session_state.det_data = edited_dets
-
-# ---------------------------------------------------------
-# TAB 2: GIAO DIỆN MỚI CHO BẢN VẼ KHÁCH HÀNG (2D OVERLAY)
-# ---------------------------------------------------------
-with tab2:
-    col_2d_1, col_2d_2 = st.columns([1.2, 1.1])
-    
-    with col_2d_1:
-        st.header("1. Upload Bản vẽ & Căn Tỷ lệ")
-        bg_file = st.file_uploader("Tải lên bản vẽ mặt bằng (PDF chuyển sang PNG/JPG)", type=['png', 'jpg', 'jpeg'])
-        st.info("Khai báo kích thước thực tế của vùng bản vẽ để hệ thống tự động quy đổi tỷ lệ Pixel ra Mét.")
-        col_w, col_h = st.columns(2)
-        bg_real_width = col_w.number_input("Chiều ngang bản vẽ (mét)", value=30.0)
-        bg_real_height = col_h.number_input("Chiều dọc bản vẽ (mét)", value=20.0)
-        
-        st.subheader("🎛️ Vị trí Tủ & Hao hụt (Dùng cho BOM)")
-        col_p2d1, col_p2d2 = st.columns(2)
-        panel_x_2d = col_p2d1.number_input("Tọa độ X (Tủ)", value=0.0, key="px_2d")
-        panel_y_2d = col_p2d2.number_input("Tọa độ Y (Tủ)", value=0.0, key="py_2d")
-        wastage_percent_2d = st.number_input("Hệ số hao hụt cáp (%)", min_value=0, value=20, step=5, key="wast_2d")
-        
-    with col_2d_2:
-        st.header("2. Cấu hình Đầu dò & Vật cản")
-        
-        with st.expander("⚙️ Danh sách Thiết bị (Bấm '+' thêm)", expanded=True):
-            edited_auto_config_2d = st.data_editor(st.session_state.auto_config_2d, num_rows="dynamic", use_container_width=True, 
-                column_config={"Color": st.column_config.SelectboxColumn("Màu", options=["cyan", "magenta", "yellow", "lime", "red"])}, key="ed_cfg_2d")
-            st.session_state.auto_config_2d = edited_auto_config_2d
-            
-            if st.button("🚀 Tạo nhanh lưới tự động (Phủ kín bản vẽ)", type="primary"):
-                new_dets_2d = []
-                for _, row_cfg in edited_auto_config_2d.iterrows():
-                    spacing = row_cfg["Radius"] * 1.5 
-                    nx, ny = max(1, math.ceil(bg_real_width / spacing)), max(1, math.ceil(bg_real_height / spacing))
-                    count = 1
-                    for x in np.linspace(spacing/2, bg_real_width - spacing/2, nx):
-                        for y in np.linspace(spacing/2, bg_real_height - spacing/2, ny):
-                            new_dets_2d.append({"ID": f"{row_cfg['Model']} ({count:02d})", "Model": row_cfg['Model'], "Gas": row_cfg['Target Gas'], "X": round(x, 1), "Y": round(y, 1), "Radius": row_cfg["Radius"], "Color": row_cfg["Color"]})
-                            count += 1
-                st.session_state.det_data_2d = pd.DataFrame(new_dets_2d)
-                st.rerun()
-
-        st.write("📋 **Tọa độ Thiết bị:**")
-        edited_dets_2d = st.data_editor(st.session_state.det_data_2d, num_rows="dynamic", use_container_width=True, key="ed_dets_2d")
-        st.session_state.det_data_2d = edited_dets_2d
-        
-        with st.expander("🚧 Vẽ Vật cản (Để tạo bóng mờ điểm mù trên ảnh)"):
-            edited_obs_2d = st.data_editor(st.session_state.obs_data_2d, num_rows="dynamic", use_container_width=True, 
-                column_config={"Type": st.column_config.SelectboxColumn("Loại", options=["Cylinder", "Box"])}, key="ed_obs_2d")
-            st.session_state.obs_data_2d = edited_obs_2d
+    st.session_state.auto_config_2d = pd.DataFrame([{"Target Gas": "CH4", "Model": "SD-1", "Radius": 5.0, "Color": "cyan"}])
 
 
 # ==========================================
-# THÔNG TIN DỰ ÁN DÙNG CHUNG CHO BÁO CÁO WORD
-# ==========================================
-st.markdown("---")
-st.header("3. 📝 Thông tin Dự án (Hiển thị trên File Word)")
-col_info1, col_info2, col_info3 = st.columns([1, 1, 1])
-with col_info1:
-    project_name = st.text_input("Tên Dự án / Gói thầu", value="Thiết kế Hệ thống Giám sát Rò rỉ Khí")
-    author_name = st.text_input("Người lập báo cáo", value="Cao Minh Lợi - Giám đốc Kỹ thuật")
-with col_info2:
-    client_name = st.text_input("Đơn vị / Khách hàng", value="Nhà máy ABC")
-    report_date = st.date_input("Ngày lập báo cáo")
-with col_info3:
-    report_number = st.text_input("Số Báo cáo (No.)", value="RKV_TE_001/BC")
-
-
-# ==========================================
-# 4. HÀM XỬ LÝ LÕI VÀ ĐỒ HỌA (KHÔI PHỤC CHI TIẾT)
+# CÁC HÀM XỬ LÝ LÕI VÀ ĐỒ HỌA
 # ==========================================
 def create_obstacle_polys(df_obs):
     obs_polys = []
@@ -278,7 +87,6 @@ def check_collision_shapely(df_dets, obs_polys):
         if any(poly.contains(pt) for poly in obs_polys): collisions.append(det['ID'])
     return collisions
 
-# Hàm vẽ 2D thông minh hỗ trợ cả 2 chế độ
 def generate_2d_plot(room_poly, obs_polys, df_dets_group, gas_name, px, py, bg_img=None, b_w=0, b_h=0):
     minx, miny, maxx, maxy = room_poly.bounds
     res = 0.2
@@ -315,18 +123,16 @@ def generate_2d_plot(room_poly, obs_polys, df_dets_group, gas_name, px, py, bg_i
     fig, ax = plt.subplots(figsize=(10, 8))
     coverage_2d = coverage_mask.reshape(xx.shape)
     
-    # NẾU CÓ ẢNH NỀN (CHẾ ĐỘ TAB 2)
     if bg_img is not None:
         ax.imshow(bg_img, extent=[0, b_w, 0, b_h])
         ax.contourf(xx, yy, coverage_2d, levels=[0.5, 1], colors=['#00FFAA'], alpha=0.4, zorder=1)
         rx, ry = room_poly.exterior.xy
-        ax.plot(rx, ry, 'k-', lw=1, zorder=2) # Viền ảnh
+        ax.plot(rx, ry, 'k-', lw=1, zorder=2)
     else:
         ax.contourf(xx, yy, coverage_2d, levels=[0.5, 1], colors=['#A8E6CF'], alpha=0.6, zorder=1)
         rx, ry = room_poly.exterior.xy
         ax.plot(rx, ry, 'k-', lw=3, zorder=2)
     
-    # Đánh dấu tủ
     ax.plot(px, py, 's', color='red', markersize=12, markeredgecolor='black', zorder=5)
     ax.text(px + 0.3, py + 0.3, "Control Panel", color='red', fontweight='bold', zorder=6, bbox=dict(facecolor='white', alpha=0.8, edgecolor='none', pad=1))
 
@@ -346,7 +152,6 @@ def generate_2d_plot(room_poly, obs_polys, df_dets_group, gas_name, px, py, bg_i
     ax.axis('equal'); ax.grid(True, linestyle=':', alpha=0.5)
     return fig, ty_le
 
-# Khôi phục đồ họa 3D đầy đủ lưới vật cản
 def generate_plotly_3d_complex(room_poly, rz, obs_polys, df_obs, df_dets, px, py, pz):
     fig = go.Figure()
     rx, ry = room_poly.exterior.xy
@@ -393,7 +198,6 @@ def generate_plotly_3d_complex(room_poly, rz, obs_polys, df_obs, df_dets, px, py
     )
     return fig
 
-# Hàm tính BOM động cho cả 2 tab
 def build_bom_df(det_df, p_x, p_y, r_z, p_z, waste):
     bom_items = [{"STT": 1, "Hạng mục thiết bị": "Tủ điều khiển trung tâm đo khí", "Đơn vị": "Bộ", "Khối lượng": 1}]
     stt = 2
@@ -403,27 +207,22 @@ def build_bom_df(det_df, p_x, p_y, r_z, p_z, waste):
         for model, qty in counts.items():
             bom_items.append({"STT": stt, "Hạng mục thiết bị": f"Đầu dò đo khí rò rỉ - Model: {model}", "Đơn vị": "Bộ", "Khối lượng": qty})
             stt += 1
-        
         for _, d in det_df.iterrows():
-            cable_up = abs(r_z - p_z) if 'Z' in det_df.columns else 3.0 # Tab 2 mặc định tường 3m
+            cable_up = abs(r_z - p_z) if 'Z' in det_df.columns else 3.0
             cable_horizontal = abs(d['X'] - p_x) + abs(d['Y'] - p_y)
-            cable_down = abs(r_z - d['Z']) if 'Z' in det_df.columns else 1.5 # Đầu dò tab 2 mặc định thả ở độ cao 1.5m
+            cable_down = abs(r_z - d['Z']) if 'Z' in det_df.columns else 1.5 
             total_cable_length += (cable_up + cable_horizontal + cable_down)
-            
         total_cable_length = math.ceil(total_cable_length * (1 + waste / 100))
-        
     bom_items.append({"STT": stt, "Hạng mục thiết bị": "Cáp tín hiệu chống nhiễu chuyên dụng", "Đơn vị": "Mét", "Khối lượng": total_cable_length})
     bom_items.append({"STT": stt+1, "Hạng mục thiết bị": "Chuông đèn cảnh báo (Siren/Light)", "Đơn vị": "Bộ", "Khối lượng": len(det_df) if not det_df.empty else 1})
     return pd.DataFrame(bom_items)
 
-# Động cơ xuất Word thông minh phân loại 3D/2D
 def generate_full_word_report(figs_dict, img_3d_bytes, bom_df, p_name, c_name, author, r_date, r_num, is_3d=True):
     doc = Document()
     style = doc.styles['Normal']
     style.font.name = 'Arial'
     style.font.size = Pt(12)
 
-    # HEADER & FOOTER
     section = doc.sections[0]
     header = section.header
     h_para = header.paragraphs[0]
@@ -453,7 +252,6 @@ def generate_full_word_report(figs_dict, img_3d_bytes, bom_df, p_name, c_name, a
     doc.add_paragraph("_" * 60)
     
     section_num = 1
-    # Nếu là Tab 1 thì nhúng hình 3D
     if is_3d and img_3d_bytes:
         h1 = doc.add_heading(f'{section_num}. PHÂN BỔ KHÔNG GIAN TỔNG THỂ (MÔ PHỎNG 3D)', level=1)
         for run in h1.runs: run.font.name = 'Arial'
@@ -498,19 +296,118 @@ def generate_full_word_report(figs_dict, img_3d_bytes, bom_df, p_name, c_name, a
     stream.seek(0)
     return stream
 
-# ==========================================
-# 5. TRIGGER XUẤT BÁO CÁO (ĐẶT Ở DƯỚI CÙNG CHO DỄ TÌM)
-# ==========================================
-st.markdown("---")
-col_run1, col_run2 = st.columns(2)
 
-with col_run1:
-    if st.button("📊 XUẤT BÁO CÁO TỪ TAB 1 (MÔ PHỎNG 3D)", type='primary', use_container_width=True):
-        if room_poly is None or edited_dets.empty:
-            st.error("Lỗi Tab 1: Cần vẽ phòng và rải đầu dò trước khi xuất báo cáo!")
+# ==========================================
+# LUỒNG CHÍNH 1: MÔ PHỎNG 3D CHUYÊN SÂU
+# ==========================================
+if app_mode == "1️⃣ Thiết kế Không gian Đa lớp (3D)":
+    st.markdown("## 🚀 Chế độ Thiết kế Không gian 3D Chuyên sâu")
+    
+    col_input1, col_input2 = st.columns([1.2, 1.1])
+    with col_input1:
+        st.header("1. Không gian & Tủ Trung Tâm")
+        room_z = st.number_input("Chiều cao trần nhà xưởng (Z) - mét", min_value=1.0, value=5.0, key="z_3d")
+
+        st.subheader("🎛️ Vị trí Tủ Điều Khiển & Hao hụt")
+        col_p1, col_p2, col_p3 = st.columns(3)
+        panel_x = col_p1.number_input("Tọa độ X (Tủ)", value=0.0, key="px_3d")
+        panel_y = col_p2.number_input("Tọa độ Y (Tủ)", value=0.0, key="py_3d")
+        panel_z = col_p3.number_input("Cao độ Z (Tủ)", value=1.5, key="pz_3d")
+        wastage_percent = st.number_input("Hệ số hao hụt cáp thi công (%)", min_value=0, value=20, step=5, key="wast_3d")
+
+        st.subheader("📐 Định hình Không gian")
+        col_t1, col_t2, col_t3 = st.columns(3)
+        with col_t1:
+            if st.button("🟩 Mẫu Chữ Nhật", use_container_width=True, key="btn_rect"): st.session_state.room_data = pd.DataFrame({"X": [0, 15, 15, 0], "Y": [0, 0, 10, 10]}); st.rerun()
+        with col_t2:
+            if st.button("▛ Mẫu Chữ L", use_container_width=True, key="btn_l"): st.session_state.room_data = pd.DataFrame({"X": [0, 15, 15, 6, 6, 0], "Y": [0, 0, 6, 6, 12, 12]}); st.rerun()
+        with col_t3:
+            if st.button("⨆ Mẫu Chữ U", use_container_width=True, key="btn_u"): st.session_state.room_data = pd.DataFrame({"X": [0, 20, 20, 15, 15, 5, 5, 0], "Y": [0, 0, 15, 15, 5, 5, 15, 15]}); st.rerun()
+
+        edited_room = st.data_editor(st.session_state.room_data, num_rows="dynamic", use_container_width=True, key="ed_room_3d")
+        
+        if len(edited_room) >= 3:
+            room_poly = Polygon(list(zip(edited_room['X'], edited_room['Y'])))
+            fig_grid, ax_grid = plt.subplots(figsize=(6, 5))
+            x_ext, y_ext = room_poly.exterior.xy
+            ax_grid.plot(x_ext, y_ext, color='#333333', linewidth=2)
+            ax_grid.fill(x_ext, y_ext, alpha=0.1, color='blue')
+            for idx, row in edited_room.iterrows():
+                ax_grid.plot(row['X'], row['Y'], 'ro', markersize=6, zorder=10)
+                ax_grid.text(row['X'] + 0.3, row['Y'] + 0.3, f"P{idx}", color='red', fontweight='bold', fontsize=11, zorder=11)
+            ax_grid.plot(panel_x, panel_y, 's', color='red', markersize=12, markeredgecolor='black', zorder=12)
+            ax_grid.text(panel_x + 0.5, panel_y + 0.5, "TỦ TT", color='red', fontweight='bold', zorder=12)
+            
+            # Vẽ thử vật cản nháp
+            for _, obs in st.session_state.obs_data.iterrows():
+                if obs['Type'] == 'Cylinder': ax_grid.add_patch(plt.Circle((obs['X'], obs['Y']), obs['Width_Radius'], color='gray', alpha=0.5))
+                elif obs['Type'] == 'Box':
+                    box = Polygon([(obs['X']-obs['Width_Radius']/2, obs['Y']-obs['Length']/2), (obs['X']+obs['Width_Radius']/2, obs['Y']-obs['Length']/2),
+                                   (obs['X']+obs['Width_Radius']/2, obs['Y']+obs['Length']/2), (obs['X']-obs['Width_Radius']/2, obs['Y']+obs['Length']/2)])
+                    bx, by = affinity.rotate(box, obs.get('Angle', 0), origin='center').exterior.xy
+                    ax_grid.fill(bx, by, color='gray', alpha=0.5)
+            
+            for _, det in st.session_state.det_data.iterrows():
+                c = det['Color'].lower() if det['Color'].lower() in mcolors.CSS4_COLORS else 'blue'
+                ax_grid.plot(det['X'], det['Y'], '^', color=c, markersize=8, markeredgecolor='black')
+
+            ax_grid.set_aspect('equal'); ax_grid.grid(True, linestyle='--', alpha=0.5)
+            st.pyplot(fig_grid)
         else:
-            with st.spinner('Đang kết xuất báo cáo 3D chuẩn ISO...'):
+            st.error("Phòng cần ít nhất 3 góc!")
+            room_poly = None
+
+    with col_input2:
+        st.header("2. Bố trí Thiết bị & Khí (3D)")
+        with st.expander("🚧 Danh sách Vật cản (Cylinder / Box)", expanded=True):
+            edited_obs = st.data_editor(st.session_state.obs_data, num_rows="dynamic", use_container_width=True, column_config={"Type": st.column_config.SelectboxColumn("Loại", options=["Cylinder", "Box"])}, key="ed_obs_3d")
+            st.session_state.obs_data = edited_obs
+
+        with st.expander("⚙️ Cấu hình Các Phân hệ Khí", expanded=True):
+            edited_auto_config = st.data_editor(st.session_state.auto_config, num_rows="dynamic", use_container_width=True,
+                column_config={"Layer": st.column_config.SelectboxColumn("Mặt phẳng", options=["Khí Nhẹ (Sát trần)", "Khí Nặng (Sát sàn)"]), "Color": st.column_config.SelectboxColumn("Màu", options=["cyan", "magenta", "yellow", "lime", "red"])}, key="ed_cfg_3d")
+            st.session_state.auto_config = edited_auto_config
+
+            if st.button("🚀 Tự động Rải Đầu dò (Mặt bằng 3D)", type="primary"):
+                if room_poly is not None:
+                    new_dets = []
+                    for _, row_cfg in edited_auto_config.iterrows():
+                        z_val = max(room_z - 0.5, 0.5) if "Nhẹ" in row_cfg["Layer"] else 0.5
+                        spacing = row_cfg["Radius"] * 1.5 
+                        minx, miny, maxx, maxy = room_poly.bounds
+                        nx, ny = max(1, math.ceil((maxx - minx)/spacing)), max(1, math.ceil((maxy - miny)/spacing))
+                        count = 1
+                        for x in np.linspace(minx + (maxx-minx)/(2*nx), maxx - (maxx-minx)/(2*nx), nx):
+                            for y in np.linspace(miny + (maxy-miny)/(2*ny), maxy - (maxy-miny)/(2*ny), ny):
+                                if room_poly.contains(Point(x, y)): 
+                                    new_dets.append({"ID": f"{row_cfg['Model']} ({count:02d})", "Model": row_cfg['Model'], "Gas": f"{row_cfg['Target Gas']}", "X": round(x, 1), "Y": round(y, 1), "Z": z_val, "Radius": row_cfg["Radius"], "Color": row_cfg["Color"]})
+                                    count += 1
+                    st.session_state.det_data = pd.DataFrame(new_dets)
+                    st.rerun()
+
+        st.write("📋 **Bảng Tọa độ Đầu dò Thực tế:**")
+        edited_dets = st.data_editor(st.session_state.det_data, num_rows="dynamic", use_container_width=True, key="ed_dets_3d")
+        st.session_state.det_data = edited_dets
+
+    # CHẠY PHÂN TÍCH VÀ HIỂN THỊ ĐỒ HỌA TRỰC TIẾP LÊN WEB (ĐÃ KHÔI PHỤC)
+    st.markdown("---")
+    st.header("3. 📊 Phân tích & Xuất Báo cáo")
+    col_info1, col_info2, col_info3 = st.columns([1, 1, 1])
+    with col_info1: project_name = st.text_input("Tên Dự án", value="Thiết kế Giám sát Rò rỉ", key="pn_1")
+    with col_info2: client_name = st.text_input("Khách hàng", value="Nhà máy ABC", key="cn_1")
+    with col_info3: report_number = st.text_input("Số Báo cáo", value="RKV_TE_001/BC", key="rn_1")
+    
+    author_name = st.text_input("Người lập báo cáo", value="Cao Minh Lợi - Giám đốc Kỹ thuật", key="au_1")
+    report_date = st.date_input("Ngày lập báo cáo", key="rd_1")
+
+    if st.button("🚀 CHẠY MÔ PHỎNG & TẠO FILE BÁO CÁO (3D)", type='primary', use_container_width=True):
+        if room_poly is None or edited_dets.empty:
+            st.error("Lỗi: Cần vẽ phòng và rải đầu dò trước khi chạy!")
+        else:
+            with st.spinner('Đang nội suy không gian 3D và kết xuất báo cáo...'):
                 obs_polys = create_obstacle_polys(edited_obs)
+                
+                # Hiển thị biểu đồ 3D
                 fig_3d = generate_plotly_3d_complex(room_poly, room_z, obs_polys, edited_obs, edited_dets, panel_x, panel_y, panel_z)
                 st.plotly_chart(fig_3d, use_container_width=True)
                 
@@ -518,35 +415,118 @@ with col_run1:
                 try: fig_3d.write_image(img_3d_bytes, format='png', width=800, height=500); img_3d_bytes.seek(0)
                 except: img_3d_bytes = None
 
+                # ĐÃ KHÔI PHỤC: HIỂN THỊ TABS BẢN ĐỒ 2D NGAY TRÊN WEB
+                gas_groups = edited_dets['Gas'].unique()
+                ui_tabs = st.tabs([f"Bản đồ: {g}" for g in gas_groups])
                 figs_dict = {} 
-                for g in edited_dets['Gas'].unique():
-                    f, c = generate_2d_plot(room_poly, obs_polys, edited_dets[edited_dets['Gas']==g], g, panel_x, panel_y)
-                    figs_dict[g] = {'fig': f, 'coverage': c}
+                
+                for i, gas_name in enumerate(gas_groups):
+                    with ui_tabs[i]:
+                        f, c = generate_2d_plot(room_poly, obs_polys, edited_dets[edited_dets['Gas']==gas_name], gas_name, panel_x, panel_y)
+                        st.pyplot(f) # Hiển thị hình ảnh
+                        if c >= 80: st.success(f"✅ Độ phủ: {c:.1f}%")
+                        else: st.warning(f"⚠️ Độ phủ: {c:.1f}%")
+                        figs_dict[gas_name] = {'fig': f, 'coverage': c}
 
+                # Tạo BOM và xuất Word
                 bom_df = build_bom_df(edited_dets, panel_x, panel_y, room_z, panel_z, wastage_percent)
+                st.write("📋 **Bảng Bóc tách Khối lượng (BOM):**")
+                st.dataframe(bom_df) # Hiển thị BOM lên web
+                
                 word_stream = generate_full_word_report(figs_dict, img_3d_bytes, bom_df, project_name, client_name, author_name, report_date, report_number, is_3d=True)
-                st.download_button("📄 Tải File Word (Từ Tab 1)", word_stream, f"BaoCao_3D_{client_name}.docx", type="primary")
+                st.download_button("📥 TẢI BÁO CÁO WORD (3D)", word_stream, f"BaoCao_3D_{client_name}.docx", type="primary")
 
-with col_run2:
-    if st.button("🖼️ XUẤT BÁO CÁO TỪ TAB 2 (BẢN VẼ 2D)", type='primary', use_container_width=True):
+
+# ==========================================
+# LUỒNG CHÍNH 2: RẢI NHANH TRÊN BẢN VẼ 2D
+# ==========================================
+elif app_mode == "2️⃣ Rải nhanh trên Bản vẽ 2D (Overlay)":
+    st.markdown("## 🖼️ Chế độ Rải nhanh trên Bản vẽ 2D (Overlay)")
+    
+    col_2d_1, col_2d_2 = st.columns([1.2, 1.1])
+    
+    with col_2d_1:
+        st.header("1. Upload Bản vẽ & Căn Tỷ lệ")
+        bg_file = st.file_uploader("Tải lên mặt bằng (PNG/JPG)", type=['png', 'jpg', 'jpeg'])
+        col_w, col_h = st.columns(2)
+        bg_real_width = col_w.number_input("Chiều ngang thực tế (m)", value=30.0)
+        bg_real_height = col_h.number_input("Chiều dọc thực tế (m)", value=20.0)
+        
+        st.subheader("🎛️ Tủ Điều Khiển & Hao hụt cáp")
+        col_p2d1, col_p2d2 = st.columns(2)
+        panel_x_2d = col_p2d1.number_input("Tọa độ X (Tủ)", value=0.0, key="px_2d")
+        panel_y_2d = col_p2d2.number_input("Tọa độ Y (Tủ)", value=0.0, key="py_2d")
+        wastage_percent_2d = st.number_input("Hệ số hao hụt cáp (%)", min_value=0, value=20, step=5, key="wast_2d")
+        
+    with col_2d_2:
+        st.header("2. Cấu hình Thiết bị & Vật cản")
+        with st.expander("⚙️ Danh sách Thiết bị", expanded=True):
+            edited_auto_config_2d = st.data_editor(st.session_state.auto_config_2d, num_rows="dynamic", use_container_width=True, 
+                column_config={"Color": st.column_config.SelectboxColumn("Màu", options=["cyan", "magenta", "yellow", "lime", "red"])}, key="ed_cfg_2d")
+            st.session_state.auto_config_2d = edited_auto_config_2d
+            
+            if st.button("🚀 Tạo lưới phủ tự động", type="primary"):
+                new_dets_2d = []
+                for _, row_cfg in edited_auto_config_2d.iterrows():
+                    spacing = row_cfg["Radius"] * 1.5 
+                    nx, ny = max(1, math.ceil(bg_real_width / spacing)), max(1, math.ceil(bg_real_height / spacing))
+                    count = 1
+                    for x in np.linspace(spacing/2, bg_real_width - spacing/2, nx):
+                        for y in np.linspace(spacing/2, bg_real_height - spacing/2, ny):
+                            new_dets_2d.append({"ID": f"{row_cfg['Model']} ({count:02d})", "Model": row_cfg['Model'], "Gas": row_cfg['Target Gas'], "X": round(x, 1), "Y": round(y, 1), "Radius": row_cfg["Radius"], "Color": row_cfg["Color"]})
+                            count += 1
+                st.session_state.det_data_2d = pd.DataFrame(new_dets_2d)
+                st.rerun()
+
+        st.write("📋 **Tọa độ Thiết bị (Chỉnh tay nếu đè lên vật cản):**")
+        edited_dets_2d = st.data_editor(st.session_state.det_data_2d, num_rows="dynamic", use_container_width=True, key="ed_dets_2d")
+        st.session_state.det_data_2d = edited_dets_2d
+        
+        with st.expander("🚧 Vẽ Vật cản (Chặn bán kính trên ảnh)"):
+            edited_obs_2d = st.data_editor(st.session_state.obs_data_2d, num_rows="dynamic", use_container_width=True, column_config={"Type": st.column_config.SelectboxColumn("Loại", options=["Cylinder", "Box"])}, key="ed_obs_2d")
+            st.session_state.obs_data_2d = edited_obs_2d
+
+    st.markdown("---")
+    st.header("3. 📊 Phân tích & Xuất Báo cáo")
+    col_info1, col_info2, col_info3 = st.columns([1, 1, 1])
+    with col_info1: project_name = st.text_input("Tên Dự án", value="Thiết kế Giám sát Rò rỉ", key="pn_2")
+    with col_info2: client_name = st.text_input("Khách hàng", value="Nhà máy ABC", key="cn_2")
+    with col_info3: report_number = st.text_input("Số Báo cáo", value="RKV_TE_001/BC", key="rn_2")
+    
+    author_name = st.text_input("Người lập báo cáo", value="Nguyễn Đình Trường Giang", key="au_2")
+    report_date = st.date_input("Ngày lập báo cáo", key="rd_2")
+
+    if st.button("🚀 CHẠY MÔ PHỎNG & TẠO FILE BÁO CÁO (2D)", type='primary', use_container_width=True):
         if bg_file is None or edited_dets_2d.empty:
-            st.error("Lỗi Tab 2: Bạn cần Upload bản vẽ và bấm Rải đầu dò trước khi xuất báo cáo!")
+            st.error("Lỗi: Bạn cần Upload bản vẽ và rải đầu dò!")
         else:
-            with st.spinner('Đang kết xuất báo cáo 2D Overlay...'):
+            with st.spinner('Đang ép lớp nhiệt (Heatmap) lên bản vẽ...'):
                 img = Image.open(bg_file)
                 bg_poly = Polygon([(0,0), (bg_real_width,0), (bg_real_width, bg_real_height), (0, bg_real_height)])
                 obs_polys_2d = create_obstacle_polys(edited_obs_2d)
                 
+                gas_groups = edited_dets_2d['Gas'].unique()
+                ui_tabs = st.tabs([f"Bản đồ: {g}" for g in gas_groups])
                 figs_dict_2d = {}
-                for g in edited_dets_2d['Gas'].unique():
-                    f, c = generate_2d_plot(bg_poly, obs_polys_2d, edited_dets_2d[edited_dets_2d['Gas']==g], g, panel_x_2d, panel_y_2d, bg_img=img, b_w=bg_real_width, b_h=bg_real_height)
-                    st.pyplot(f)
-                    figs_dict_2d[g] = {'fig': f, 'coverage': c}
                 
-                bom_df_2d = build_bom_df(edited_dets_2d, panel_x_2d, panel_y_2d, 3.0, 1.5, wastage_percent_2d) # Trần mặc định 3m
+                for i, g in enumerate(gas_groups):
+                    with ui_tabs[i]:
+                        f, c = generate_2d_plot(bg_poly, obs_polys_2d, edited_dets_2d[edited_dets_2d['Gas']==g], g, panel_x_2d, panel_y_2d, bg_img=img, b_w=bg_real_width, b_h=bg_real_height)
+                        st.pyplot(f)
+                        if c >= 80: st.success(f"✅ Độ phủ: {c:.1f}%")
+                        else: st.warning(f"⚠️ Độ phủ: {c:.1f}%")
+                        figs_dict_2d[g] = {'fig': f, 'coverage': c}
+                
+                bom_df_2d = build_bom_df(edited_dets_2d, panel_x_2d, panel_y_2d, 3.0, 1.5, wastage_percent_2d)
+                st.write("📋 **Bảng Bóc tách Khối lượng (BOM):**")
+                st.dataframe(bom_df_2d)
+                
                 word_stream_2d = generate_full_word_report(figs_dict_2d, None, bom_df_2d, project_name, client_name, author_name, report_date, report_number, is_3d=False)
-                st.download_button("📄 Tải File Word (Từ Tab 2)", word_stream_2d, f"BaoCao_2D_{client_name}.docx", type="primary")
+                st.download_button("📥 TẢI BÁO CÁO WORD (2D Overlay)", word_stream_2d, f"BaoCao_2D_{client_name}.docx", type="primary")
 
+# ==========================================
+# FOOTER BẢN QUYỀN
+# ==========================================
 st.markdown("""
     <hr style="border: 0; height: 1px; background-image: linear-gradient(to right, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0)); margin-top: 50px;">
     <div style="text-align: center; color: #888888; font-size: 14px; padding-bottom: 20px;">
