@@ -41,11 +41,10 @@ with st.sidebar:
 
 st.title("🛡️ Riken Viet - Hệ thống Thiết kế & Dự toán Vùng phủ Khí")
 
-# --- KHỞI TẠO DỮ LIỆU ĐÃ NÂNG CẤP TRUE-SPACE 3D ---
+# --- KHỞI TẠO DỮ LIỆU ---
 if 'room_data' not in st.session_state:
     st.session_state.room_data = pd.DataFrame({"X": [0, 15, 15, 0], "Y": [0, 0, 10, 10]}) 
 if 'obs_data' not in st.session_state:
-    # Mẫu demo: 1 bồn chứa đặc và 1 van xả trang trí lơ lửng
     st.session_state.obs_data = pd.DataFrame([
         {"Type": "Cylinder", "Role": "Vật cản đặc (Che khí)", "X": 7.5, "Y": 5.0, "Z_base": 0.0, "Width_Radius": 1.5, "Length": 0.0, "Height": 4.0, "Angle": 0},
         {"Type": "Box", "Role": "Trang trí 3D (Xuyên thấu)", "X": 9.2, "Y": 5.0, "Z_base": 2.0, "Width_Radius": 0.6, "Length": 0.6, "Height": 0.5, "Angle": 0}
@@ -66,7 +65,10 @@ if 'obs_data_2d' not in st.session_state:
         {"Type": "Box", "Role": "Vật cản đặc (Che khí)", "X": 15.0, "Y": 10.0, "Z_base": 0.0, "Width_Radius": 5.0, "Length": 5.0, "Height": 0.0, "Angle": 0}
     ])
 if 'auto_config_2d' not in st.session_state:
-    st.session_state.auto_config_2d = pd.DataFrame([{"Target Gas": "CH4", "Model": "SD-1", "Radius": 5.0, "Color": "cyan"}])
+    st.session_state.auto_config_2d = pd.DataFrame([
+        {"Target Gas": "CH4", "Model": "SD-1", "Radius": 5.0, "Color": "cyan"},
+        {"Target Gas": "O2", "Model": "OX-600", "Radius": 4.0, "Color": "lime"}
+    ])
 
 
 # ==========================================
@@ -77,7 +79,7 @@ def create_obstacle_polys(df_obs):
     for _, row in df_obs.iterrows():
         if pd.isna(row['X']) or pd.isna(row['Y']) or pd.isna(row['Width_Radius']): continue
         
-        # BỘ LỌC THÔNG MINH: Chỉ tính toán che chắn 2D cho Vật cản đặc
+        # Chỉ tính toán che chắn 2D cho Vật cản đặc
         role = row.get('Role', 'Vật cản đặc (Che khí)')
         if role != 'Vật cản đặc (Che khí)': 
             continue
@@ -159,9 +161,6 @@ def generate_2d_plot(room_poly, obs_polys, df_dets_group, gas_name, px, py, bg_i
     ax.axis('equal'); ax.grid(True, linestyle=':', alpha=0.5)
     return fig, ty_le
 
-# ==========================================
-# ĐỘNG CƠ DỰNG HÌNH LẮP GHÉP TRUE-SPACE 3D
-# ==========================================
 def generate_plotly_3d_complex(room_poly, rz, obs_polys, df_obs, df_dets, px, py, pz):
     fig = go.Figure()
     rx, ry = room_poly.exterior.xy
@@ -197,7 +196,6 @@ def generate_plotly_3d_complex(room_poly, rz, obs_polys, df_obs, df_dets, px, py
         z_base = obs.get('Z_base', 0.0)
         h = obs.get('Height', 4.0)
         
-        # Chọn màu sắc theo thuộc tính: Đặc = Xám đậm, Trang trí = Xanh kim loại nhạt
         color_scale = 'Greys' if obs.get('Role') == 'Vật cản đặc (Che khí)' else 'Blues'
         solid_color = 'gray' if obs.get('Role') == 'Vật cản đặc (Che khí)' else 'lightblue'
         
@@ -223,7 +221,6 @@ def generate_plotly_3d_complex(room_poly, rz, obs_polys, df_obs, df_dets, px, py
             obs_leg_added = True
             
         elif obs['Type'] == 'Sphere':
-            # Đối với khối cầu, Z_base là tâm điểm của quả cầu
             sx, sy, sz = get_sphere(obs['X'], obs['Y'], z_base, obs['Width_Radius'])
             sph_color = [[0, '#888888'], [1, '#888888']] if obs.get('Role') == 'Vật cản đặc (Che khí)' else [[0, '#99bbff'], [1, '#99bbff']]
             fig.add_trace(go.Surface(x=sx, y=sy, z=sz, opacity=1.0, showscale=False, colorscale=sph_color, name="Cấu trúc Thiết bị", legendgroup='obs', showlegend=show_obs_leg))
@@ -384,7 +381,6 @@ if app_mode == "1️⃣ Thiết kế Không gian Đa lớp (3D)":
             ax_grid.plot(panel_x, panel_y, 's', color='red', markersize=12, markeredgecolor='black', zorder=12)
             ax_grid.text(panel_x + 0.5, panel_y + 0.5, "TỦ TT", color='red', fontweight='bold', zorder=12)
             
-            # Tính toán Vẽ nháp 2D cho Vật Cản
             obs_polys_draft = create_obstacle_polys(st.session_state.obs_data)
             for obs in obs_polys_draft:
                 ox, oy = obs.exterior.xy
@@ -457,7 +453,7 @@ if app_mode == "1️⃣ Thiết kế Không gian Đa lớp (3D)":
     with col_info2: client_name = st.text_input("Khách hàng", value="Nhà máy ABC", key="cn_1")
     with col_info3: report_number = st.text_input("Số Báo cáo", value="RKV_TE_001/BC", key="rn_1")
     
-    author_name = st.text_input("Người lập báo cáo", value="Nguyễn Đình Trường Giang", key="au_1")
+    author_name = st.text_input("Người lập báo cáo", value="Cao Minh Lợi - Giám đốc Kỹ thuật", key="au_1")
     report_date = st.date_input("Ngày lập báo cáo", key="rd_1")
 
     if st.button("🚀 CHẠY MÔ PHỎNG & TẠO FILE BÁO CÁO (3D)", type='primary', use_container_width=True):
@@ -465,9 +461,8 @@ if app_mode == "1️⃣ Thiết kế Không gian Đa lớp (3D)":
             st.error("Lỗi: Cần vẽ phòng và rải đầu dò (nhớ bấm nút Cập nhật) trước khi chạy!")
         else:
             with st.spinner('Đang nội suy không gian 3D True-Space và kết xuất báo cáo...'):
-                obs_polys = create_obstacle_polys(st.session_state.obs_data) # Chỉ lấy vật cản Đặc để tính điểm mù 2D
+                obs_polys = create_obstacle_polys(st.session_state.obs_data)
                 
-                # Biểu đồ 3D sẽ lấy toàn bộ DataFrame để vẽ cả đồ trang trí
                 fig_3d = generate_plotly_3d_complex(room_poly, room_z, obs_polys, st.session_state.obs_data, st.session_state.det_data, panel_x, panel_y, panel_z)
                 st.plotly_chart(fig_3d, use_container_width=True)
                 
@@ -554,6 +549,49 @@ elif app_mode == "2️⃣ Rải nhanh trên Bản vẽ 2D (Overlay)":
                 st.session_state.obs_data_2d = edited_obs_2d
                 st.rerun()
 
+    # === THÊM BẢN XEM TRƯỚC (LIVE PREVIEW) CHO TAB 2 TẠI ĐÂY ===
+    if bg_file is not None:
+        st.markdown("### 👁️ Bản xem trước Mặt bằng (Live Preview)")
+        st.info("💡 Đây là bản xem trước tốc độ cao. Các vật cản che chắn sẽ được tính toán bóng mờ điểm mù chi tiết khi bạn bấm nút **CHẠY MÔ PHỎNG** bên dưới.")
+        
+        img = Image.open(bg_file)
+        fig_prev, ax_prev = plt.subplots(figsize=(10, 6))
+        
+        # 1. Vẽ nền bản vẽ
+        ax_prev.imshow(img, extent=[0, bg_real_width, 0, bg_real_height])
+        
+        # 2. Vẽ Tủ điều khiển
+        ax_prev.plot(panel_x_2d, panel_y_2d, 's', color='red', markersize=12, markeredgecolor='black')
+        ax_prev.text(panel_x_2d + 0.3, panel_y_2d + 0.3, "TỦ TT", color='red', fontweight='bold', bbox=dict(facecolor='white', alpha=0.7, edgecolor='none', pad=1))
+        
+        # 3. Vẽ Vật cản nháp (Gạch sọc để phân biệt)
+        obs_polys_preview = create_obstacle_polys(st.session_state.obs_data_2d)
+        for obs in obs_polys_preview:
+            ox, oy = obs.exterior.xy
+            ax_prev.fill(ox, oy, color='gray', alpha=0.6, hatch='//')
+            
+        # 4. Vẽ Đầu dò (Circle bán trong suốt, không cần chạy hàm bóng mờ nặng)
+        valid_colors = mcolors.CSS4_COLORS
+        for _, det in st.session_state.det_data_2d.iterrows():
+            if pd.isna(det['X']) or pd.isna(det['Y']): continue
+            c = det['Color'].lower() if isinstance(det['Color'], str) and det['Color'].lower() in valid_colors else 'blue'
+            r = det['Radius'] if not pd.isna(det['Radius']) else 5.0
+            
+            # Phủ một lớp màu mờ thể hiện bán kính
+            ax_prev.add_patch(plt.Circle((det['X'], det['Y']), r, color=c, fill=True, alpha=0.25))
+            ax_prev.add_patch(plt.Circle((det['X'], det['Y']), r, color=c, fill=False, linestyle='--', lw=1.5))
+            
+            # Chấm điểm trung tâm
+            ax_prev.plot(det['X'], det['Y'], '^', color=c, markersize=10, markeredgecolor='black')
+            ax_prev.text(det['X']+0.3, det['Y']+0.3, str(det['ID']), fontsize=8, bbox=dict(facecolor='white', alpha=0.7, edgecolor='none', pad=1))
+            
+        ax_prev.set_xlim(0, bg_real_width)
+        ax_prev.set_ylim(0, bg_real_height)
+        ax_prev.set_aspect('equal')
+        ax_prev.grid(True, linestyle=':', alpha=0.5)
+        
+        st.pyplot(fig_prev)
+
     st.markdown("---")
     st.header("3. 📊 Phân tích & Xuất Báo cáo")
     col_info1, col_info2, col_info3 = st.columns([1, 1, 1])
@@ -561,21 +599,21 @@ elif app_mode == "2️⃣ Rải nhanh trên Bản vẽ 2D (Overlay)":
     with col_info2: client_name = st.text_input("Khách hàng", value="Nhà máy ABC", key="cn_2")
     with col_info3: report_number = st.text_input("Số Báo cáo", value="RKV_TE_001/BC", key="rn_2")
     
-    author_name = st.text_input("Người lập báo cáo", value="Nguyễn Đình Trường Giang", key="au_2")
+    author_name = st.text_input("Người lập báo cáo", value="Cao Minh Lợi - Giám đốc Kỹ thuật", key="au_2")
     report_date = st.date_input("Ngày lập báo cáo", key="rd_2")
 
     if st.button("🚀 CHẠY MÔ PHỎNG & TẠO FILE BÁO CÁO (2D)", type='primary', use_container_width=True):
         if bg_file is None or st.session_state.det_data_2d.dropna(subset=['X', 'Y']).empty:
             st.error("Lỗi: Bạn cần Upload bản vẽ và rải đầu dò (nhớ bấm nút Cập nhật)!")
         else:
-            with st.spinner('Đang ép lớp nhiệt (Heatmap) lên bản vẽ...'):
+            with st.spinner('Đang ép lớp nhiệt (Heatmap) lên bản vẽ và tính toán bóng mờ...'):
                 img = Image.open(bg_file)
                 bg_poly = Polygon([(0,0), (bg_real_width,0), (bg_real_width, bg_real_height), (0, bg_real_height)])
                 
                 obs_polys_2d = create_obstacle_polys(st.session_state.obs_data_2d)
                 
                 gas_groups = st.session_state.det_data_2d.dropna(subset=['Gas'])['Gas'].unique()
-                ui_tabs = st.tabs([f"Bản đồ: {g}" for g in gas_groups])
+                ui_tabs = st.tabs([f"Bản đồ chi tiết: {g}" for g in gas_groups])
                 figs_dict_2d = {}
                 
                 for i, g in enumerate(gas_groups):
