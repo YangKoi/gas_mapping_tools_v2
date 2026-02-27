@@ -51,9 +51,10 @@ if 'obs_data' not in st.session_state:
 if 'auto_config' not in st.session_state:
     st.session_state.auto_config = pd.DataFrame([
         {"Target Gas": "CH4", "Layer": "Khí Nhẹ (Sát trần)", "Model": "SD-1 (Catalytic)", "Radius": 5.0, "Color": "cyan"},
+        {"Target Gas": "O2", "Layer": "Khí Trung bình (Vùng thở)", "Model": "OX-600", "Radius": 4.0, "Color": "lime"},
         {"Target Gas": "H2S", "Layer": "Khí Nặng (Sát sàn)", "Model": "GD-70D (Electro)", "Radius": 4.0, "Color": "magenta"}
     ])
-# DỮ LIỆU MỚI: Bảng khai báo Nguồn rò rỉ (3D)
+# DỮ LIỆU SMART TARGETING (TAB 1)
 if 'leak_data' not in st.session_state:
     st.session_state.leak_data = pd.DataFrame([
         {"Tên Khu vực/Thiết bị": "Bơm hóa chất 01", "Gas": "H2S", "X": 3.0, "Y": 3.0, "Bán kính rủi ro (m)": 4.0}
@@ -61,7 +62,7 @@ if 'leak_data' not in st.session_state:
 if 'det_data' not in st.session_state:
     st.session_state.det_data = pd.DataFrame(columns=["ID", "Model", "Gas", "X", "Y", "Z", "Radius", "Color"])
 
-# Dữ liệu cho Tab 2
+# DỮ LIỆU CHO TAB 2
 if 'det_data_2d' not in st.session_state:
     st.session_state.det_data_2d = pd.DataFrame(columns=["ID", "Model", "Gas", "X", "Y", "Radius", "Color"])
 if 'obs_data_2d' not in st.session_state:
@@ -73,7 +74,7 @@ if 'auto_config_2d' not in st.session_state:
         {"Target Gas": "CH4", "Model": "SD-1", "Radius": 5.0, "Color": "cyan"},
         {"Target Gas": "O2", "Model": "OX-600", "Radius": 4.0, "Color": "lime"}
     ])
-# DỮ LIỆU MỚI: Bảng khai báo Nguồn rò rỉ (2D)
+# DỮ LIỆU SMART TARGETING (TAB 2)
 if 'leak_data_2d' not in st.session_state:
     st.session_state.leak_data_2d = pd.DataFrame(columns=["Tên Khu vực/Thiết bị", "Gas", "X", "Y", "Bán kính rủi ro (m)"])
 
@@ -99,7 +100,6 @@ def create_obstacle_polys(df_obs):
             obs_polys.append(affinity.rotate(box, ang, origin='center'))
     return obs_polys
 
-# Nâng cấp hàm vẽ 2D để hiển thị Điểm rò rỉ (Leak Sources)
 def generate_2d_plot(room_poly, obs_polys, df_dets_group, df_leaks, gas_name, px, py, bg_img=None, b_w=0, b_h=0):
     minx, miny, maxx, maxy = room_poly.bounds
     res = 0.2
@@ -119,7 +119,6 @@ def generate_2d_plot(room_poly, obs_polys, df_dets_group, df_leaks, gas_name, px
 
     for _, det in df_dets_group.iterrows():
         if pd.isna(det['X']) or pd.isna(det['Y']) or pd.isna(det['Radius']): continue
-        
         dx, dy, dr = det['X'], det['Y'], det['Radius']
         dist_sq = (pts_x - dx)**2 + (pts_y - dy)**2
         in_radius_mask = dist_sq <= dr**2
@@ -154,7 +153,7 @@ def generate_2d_plot(room_poly, obs_polys, df_dets_group, df_leaks, gas_name, px
         ox, oy = obs.exterior.xy
         ax.fill(ox, oy, color='gray', alpha=0.8, zorder=4)
 
-    # VẼ VÙNG NGUY HIỂM (LEAK SOURCES) CỦA KHÍ NÀY
+    # VẼ VÙNG NGUY HIỂM RÒ RỈ (LEAK SOURCES)
     if df_leaks is not None and not df_leaks.empty:
         leaks_for_gas = df_leaks[df_leaks['Gas'] == gas_name]
         for _, leak in leaks_for_gas.iterrows():
@@ -177,7 +176,6 @@ def generate_2d_plot(room_poly, obs_polys, df_dets_group, df_leaks, gas_name, px
     ax.axis('equal'); ax.grid(True, linestyle=':', alpha=0.5)
     return fig, ty_le
 
-# Nâng cấp 3D để biểu diễn nguồn rò rỉ dưới dạng cột năng lượng đỏ
 def generate_plotly_3d_complex(room_poly, rz, obs_polys, df_obs, df_dets, df_leaks, px, py, pz):
     fig = go.Figure()
     rx, ry = room_poly.exterior.xy
@@ -194,7 +192,7 @@ def generate_plotly_3d_complex(room_poly, rz, obs_polys, df_obs, df_dets, df_lea
         u, v = np.mgrid[0:2*np.pi:15j, 0:np.pi:10j]
         return r*np.cos(u)*np.sin(v)+x0, r*np.sin(u)*np.sin(v)+y0, r*np.cos(v)+z0
 
-    # Vẽ Vùng Rò Rỉ (Leak Sources)
+    # VẼ VÙNG NGUY CƠ RÒ RỈ (3D)
     leak_leg_added = False
     if df_leaks is not None and not df_leaks.empty:
         for _, leak in df_leaks.iterrows():
@@ -202,13 +200,10 @@ def generate_plotly_3d_complex(room_poly, rz, obs_polys, df_obs, df_dets, df_lea
             show_leak_leg = not leak_leg_added
             r_risk = leak.get('Bán kính rủi ro (m)', 3.0)
             
-            # Vẽ một hình trụ mờ màu đỏ biểu diễn vùng rủi ro từ sàn lên trần
             z_grid, theta = np.mgrid[0:rz:2j, 0:2*np.pi:20j]
             x_cyl = r_risk*np.cos(theta)+leak['X']
             y_cyl = r_risk*np.sin(theta)+leak['Y']
             fig.add_trace(go.Surface(x=x_cyl, y=y_cyl, z=z_grid, opacity=0.1, showscale=False, colorscale=[[0, 'red'], [1, 'red']], name="Vùng Nguy cơ rò rỉ", legendgroup='leak', showlegend=show_leak_leg))
-            
-            # Đánh dấu tâm X đỏ
             fig.add_trace(go.Scatter3d(x=[leak['X']], y=[leak['Y']], z=[0.1], mode='markers+text', marker=dict(symbol='x', size=6, color='red'), text=[f"⚠ {leak['Gas']}"], textposition="top center", textfont=dict(color="red", size=10), hoverinfo="text", hovertext=f"Nguồn: {leak['Tên Khu vực/Thiết bị']}", legendgroup='leak', showlegend=False))
             leak_leg_added = True
 
@@ -229,6 +224,7 @@ def generate_plotly_3d_complex(room_poly, rz, obs_polys, df_obs, df_dets, df_lea
         show_obs_leg = not obs_leg_added
         z_base = obs.get('Z_base', 0.0)
         h = obs.get('Height', 4.0)
+        
         color_scale = 'Greys' if obs.get('Role') == 'Vật cản đặc (Che khí)' else 'Blues'
         solid_color = 'gray' if obs.get('Role') == 'Vật cản đặc (Che khí)' else 'lightblue'
         
@@ -242,8 +238,7 @@ def generate_plotly_3d_complex(room_poly, rz, obs_polys, df_obs, df_dets, df_lea
             w = obs['Width_Radius']
             l = obs['Length'] if not pd.isna(obs['Length']) else 0
             ang = obs.get('Angle', 0) if not pd.isna(obs.get('Angle', 0)) else 0
-            box_poly = Polygon([(obs['X']-w/2, obs['Y']-l/2), (obs['X']+w/2, obs['Y']-l/2),
-                           (obs['X']+w/2, obs['Y']+l/2), (obs['X']-w/2, obs['Y']+l/2)])
+            box_poly = Polygon([(obs['X']-w/2, obs['Y']-l/2), (obs['X']+w/2, obs['Y']-l/2), (obs['X']+w/2, obs['Y']+l/2), (obs['X']-w/2, obs['Y']+l/2)])
             bx, by = affinity.rotate(box_poly, ang, origin='center').exterior.xy
             bx, by = list(bx)[:-1], list(by)[:-1] 
             x_box, y_box = bx * 2, by * 2
@@ -328,7 +323,7 @@ def generate_full_word_report(figs_dict, img_3d_bytes, bom_df, p_name, c_name, a
     if is_3d and img_3d_bytes:
         h1 = doc.add_heading(f'{section_num}. PHÂN BỔ KHÔNG GIAN TỔNG THỂ (MÔ PHỎNG 3D)', level=1)
         for run in h1.runs: run.font.name = 'Arial'
-        doc.add_paragraph("Sơ đồ dưới đây thể hiện vị trí không gian 3 chiều của các thiết bị đo khí, tủ trung tâm và các vật cản thực tế tại hiện trường. Vùng màu đỏ đại diện cho khu vực có nguy cơ rò rỉ khí cao.")
+        doc.add_paragraph("Sơ đồ dưới đây thể hiện vị trí không gian 3 chiều của các thiết bị đo khí, tủ trung tâm và các vật cản thực tế. Vùng màu đỏ đại diện cho khu vực có nguy cơ rò rỉ cao.")
         p = doc.add_paragraph()
         p.add_run().add_picture(img_3d_bytes, width=Inches(6.0))
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -359,7 +354,7 @@ def generate_full_word_report(figs_dict, img_3d_bytes, bom_df, p_name, c_name, a
         for run in hdr[i].paragraphs[0].runs: run.font.name = 'Arial'; run.font.bold = True
     for _, row in bom_df.iterrows():
         row_cells = table.add_row().cells
-        row_cells[0].text, row_cells[1].text, row_cells[2].text, row_cells[3].text = str(row['STT']), str(row['Hạng mục thiết bị']), str(row['Đơn vị']), f"{int(row['Khối lượng']):,}"
+        row_cells[0].text, row_cells[1].text, row_cells[2].text, row_cells[3].text = str(row['STT']), str(row['Hạng mục Thiết bị & Vật tư']), str(row['Đơn vị']), f"{int(row['Khối lượng']):,}"
         for cell in row_cells:
             for p in cell.paragraphs:
                 for run in p.runs: run.font.name = 'Arial'
@@ -399,6 +394,7 @@ if app_mode == "1️⃣ Thiết kế Không gian Đa lớp (3D)":
 
         edited_room = st.data_editor(st.session_state.room_data, num_rows="dynamic", use_container_width=True, key="ed_room_3d")
         
+        # BẢN VẼ NHÁP PREVIEW
         if len(edited_room) >= 3:
             room_poly = Polygon(list(zip(edited_room['X'], edited_room['Y'])))
             fig_grid, ax_grid = plt.subplots(figsize=(6, 5))
@@ -417,12 +413,12 @@ if app_mode == "1️⃣ Thiết kế Không gian Đa lớp (3D)":
                 ox, oy = obs.exterior.xy
                 ax_grid.fill(ox, oy, color='gray', alpha=0.5)
             
-            # Hiển thị nháp điểm rò rỉ
+            # Hiển thị Điểm Rủi ro trên nháp 3D
             for _, leak in st.session_state.leak_data.iterrows():
                 if pd.isna(leak['X']) or pd.isna(leak['Y']): continue
                 ax_grid.plot(leak['X'], leak['Y'], 'rx', markersize=10, zorder=15)
                 ax_grid.add_patch(plt.Circle((leak['X'], leak['Y']), leak.get('Bán kính rủi ro (m)', 3.0), color='red', fill=False, linestyle=':', zorder=14))
-                
+
             for _, det in st.session_state.det_data.iterrows():
                 if pd.isna(det['X']) or pd.isna(det['Y']): continue
                 c = det['Color'].lower() if isinstance(det['Color'], str) and det['Color'].lower() in mcolors.CSS4_COLORS else 'blue'
@@ -435,12 +431,12 @@ if app_mode == "1️⃣ Thiết kế Không gian Đa lớp (3D)":
             room_poly = None
 
     with col_input2:
-        st.header("2. Phân bổ Mục tiêu & Đầu dò")
+        st.header("2. Phân bổ Mục tiêu & Thiết bị")
         
-        with st.expander("🚨 Khai báo Nguồn Rủi ro (Rò rỉ Khí)", expanded=True):
-            st.info("Khai báo các cụm Bơm, Van... Hệ thống sẽ ưu tiên rải đầu dò bao quanh khu vực này thay vì rải kín cả phòng.")
-            edited_leak = st.data_editor(st.session_state.leak_data, num_rows="dynamic", use_container_width=True, key="ed_leak_3d")
-            st.session_state.leak_data = edited_leak
+        with st.expander("🚨 Khai báo Nguồn Rủi ro (Smart Target)", expanded=True):
+            st.info("Nhập tọa độ Bơm/Van... Thuật toán rải tự động sẽ tập trung bao vây vùng này.")
+            edited_leak_3d = st.data_editor(st.session_state.leak_data, num_rows="dynamic", use_container_width=True, key="ed_leak_3d")
+            st.session_state.leak_data = edited_leak_3d
 
         with st.expander("⚙️ Cấu hình Phân hệ Khí (Rải tự động)", expanded=True):
             edited_auto_config = st.data_editor(st.session_state.auto_config, num_rows="dynamic", use_container_width=True,
@@ -460,14 +456,12 @@ if app_mode == "1️⃣ Thiết kế Không gian Đa lớp (3D)":
                         minx, miny, maxx, maxy = room_poly.bounds
                         nx, ny = max(1, math.ceil((maxx - minx)/spacing)), max(1, math.ceil((maxy - miny)/spacing))
                         
-                        # KIỂM TRA SMART TARGETING: Có khai báo vùng rò rỉ cho khí này không?
-                        target_leaks = edited_leak[edited_leak['Gas'] == target_gas].dropna(subset=['X', 'Y'])
+                        target_leaks = edited_leak_3d[edited_leak_3d['Gas'] == target_gas].dropna(subset=['X', 'Y'])
                         if not target_leaks.empty:
-                            # Tạo vùng tính toán bằng cách gộp tất cả các vòng tròn rủi ro lại
                             risk_areas = [Point(r['X'], r['Y']).buffer(r.get('Bán kính rủi ro (m)', 3.0)) for _, r in target_leaks.iterrows()]
                             valid_area = room_poly.intersection(unary_union(risk_areas))
                         else:
-                            valid_area = room_poly # Không khai báo -> Rải kín phòng
+                            valid_area = room_poly 
                         
                         count = 1
                         for x in np.linspace(minx + (maxx-minx)/(2*nx), maxx - (maxx-minx)/(2*nx), nx):
@@ -511,7 +505,7 @@ if app_mode == "1️⃣ Thiết kế Không gian Đa lớp (3D)":
         if room_poly is None or st.session_state.det_data.dropna(subset=['X', 'Y']).empty:
             st.error("Lỗi: Cần vẽ phòng và rải đầu dò trước khi chạy!")
         else:
-            with st.spinner('Đang nội suy không gian 3D và kết xuất báo cáo...'):
+            with st.spinner('Đang nội suy không gian 3D True-Space và kết xuất báo cáo...'):
                 obs_polys = create_obstacle_polys(st.session_state.obs_data)
                 
                 fig_3d = generate_plotly_3d_complex(room_poly, room_z, obs_polys, st.session_state.obs_data, st.session_state.det_data, st.session_state.leak_data, panel_x, panel_y, panel_z)
@@ -571,7 +565,7 @@ elif app_mode == "2️⃣ Rải nhanh trên Bản vẽ 2D (Overlay)":
         with col_work_left:
             st.header("2. Phân bổ Mục tiêu & Thiết bị")
             
-            with st.expander("🚨 Khai báo Nguồn Rủi ro (Rò rỉ Khí)", expanded=True):
+            with st.expander("🚨 Khai báo Nguồn Rủi ro (Smart Target)", expanded=True):
                 st.info("Nhập tọa độ Bơm/Van... Thuật toán Smart Target sẽ tự động bao vây vùng này.")
                 edited_leak_2d = st.data_editor(st.session_state.leak_data_2d, num_rows="dynamic", use_container_width=True, key="ed_leak_2d")
                 st.session_state.leak_data_2d = edited_leak_2d
@@ -606,7 +600,7 @@ elif app_mode == "2️⃣ Rải nhanh trên Bản vẽ 2D (Overlay)":
                     st.rerun()
 
             with st.form("form_edit_2d"):
-                st.write("📋 **Tọa độ Thiết bị:**")
+                st.write("📋 **Tọa độ Thiết bị (Chỉnh tay nếu đè lên vật cản):**")
                 edited_dets_2d = st.data_editor(st.session_state.det_data_2d, num_rows="dynamic", use_container_width=True, key="ed_dets_2d_manual", height=250)
                 
                 st.write("🚧 **Vẽ Vật cản (Tạo bóng mờ trên ảnh):**")
@@ -637,6 +631,7 @@ elif app_mode == "2️⃣ Rải nhanh trên Bản vẽ 2D (Overlay)":
                 ox, oy = obs.exterior.xy
                 ax_prev.fill(ox, oy, color='gray', alpha=0.6, hatch='//')
                 
+            # Hiển thị Điểm Rủi ro trên Preview 2D
             for _, leak in st.session_state.leak_data_2d.iterrows():
                 if pd.isna(leak['X']) or pd.isna(leak['Y']): continue
                 ax_prev.plot(leak['X'], leak['Y'], 'rx', markersize=10, zorder=15)
