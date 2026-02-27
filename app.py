@@ -79,7 +79,6 @@ def create_obstacle_polys(df_obs):
     for _, row in df_obs.iterrows():
         if pd.isna(row['X']) or pd.isna(row['Y']) or pd.isna(row['Width_Radius']): continue
         
-        # Chỉ tính toán che chắn 2D cho Vật cản đặc
         role = row.get('Role', 'Vật cản đặc (Che khí)')
         if role != 'Vật cản đặc (Che khí)': 
             continue
@@ -496,101 +495,106 @@ if app_mode == "1️⃣ Thiết kế Không gian Đa lớp (3D)":
 elif app_mode == "2️⃣ Rải nhanh trên Bản vẽ 2D (Overlay)":
     st.markdown("## 🖼️ Chế độ Rải nhanh trên Bản vẽ 2D (Overlay)")
     
-    col_2d_1, col_2d_2 = st.columns([1.2, 1.1])
+    # --- BƯỚC 1: HÀNG TRÊN CÙNG (SETUP) ---
+    col_set1, col_set2, col_set3 = st.columns([1.2, 1, 1])
     
-    with col_2d_1:
-        st.header("1. Upload Bản vẽ & Căn Tỷ lệ")
-        bg_file = st.file_uploader("Tải lên mặt bằng (PNG/JPG)", type=['png', 'jpg', 'jpeg'])
+    with col_set1:
+        bg_file = st.file_uploader("1. Tải lên Bản vẽ (PNG/JPG)", type=['png', 'jpg', 'jpeg'])
+    with col_set2:
+        st.write("📐 **Căn Tỷ lệ thực tế (m):**")
         col_w, col_h = st.columns(2)
-        bg_real_width = col_w.number_input("Chiều ngang thực tế (m)", value=30.0)
-        bg_real_height = col_h.number_input("Chiều dọc thực tế (m)", value=20.0)
-        
-        st.subheader("🎛️ Tủ Điều Khiển & Hao hụt cáp")
-        col_p2d1, col_p2d2 = st.columns(2)
-        panel_x_2d = col_p2d1.number_input("Tọa độ X (Tủ)", value=0.0, key="px_2d")
-        panel_y_2d = col_p2d2.number_input("Tọa độ Y (Tủ)", value=0.0, key="py_2d")
-        wastage_percent_2d = st.number_input("Hệ số hao hụt cáp (%)", min_value=0, value=20, step=5, key="wast_2d")
-        
-    with col_2d_2:
-        st.header("2. Cấu hình Thiết bị & Vật cản")
-        with st.expander("⚙️ Danh sách Thiết bị", expanded=True):
-            edited_auto_config_2d = st.data_editor(st.session_state.auto_config_2d, num_rows="dynamic", use_container_width=True, 
-                column_config={"Color": st.column_config.SelectboxColumn("Màu", options=["cyan", "magenta", "yellow", "lime", "red"])}, key="ed_cfg_2d_auto")
-            st.session_state.auto_config_2d = edited_auto_config_2d
-            
-            if st.button("🚀 Tạo lưới phủ tự động", type="primary"):
-                new_dets_2d = []
-                for _, row_cfg in edited_auto_config_2d.iterrows():
-                    spacing = row_cfg["Radius"] * 1.5 
-                    nx, ny = max(1, math.ceil(bg_real_width / spacing)), max(1, math.ceil(bg_real_height / spacing))
-                    count = 1
-                    for x in np.linspace(spacing/2, bg_real_width - spacing/2, nx):
-                        for y in np.linspace(spacing/2, bg_real_height - spacing/2, ny):
-                            new_dets_2d.append({"ID": f"{row_cfg['Model']} ({count:02d})", "Model": row_cfg['Model'], "Gas": row_cfg['Target Gas'], "X": round(x, 1), "Y": round(y, 1), "Radius": row_cfg["Radius"], "Color": row_cfg["Color"]})
-                            count += 1
-                st.session_state.det_data_2d = pd.DataFrame(new_dets_2d)
-                st.rerun()
+        bg_real_width = col_w.number_input("Ngang (X)", value=30.0)
+        bg_real_height = col_h.number_input("Dọc (Y)", value=20.0)
+    with col_set3:
+        st.write("🎛️ **Vị trí Tủ & Cáp:**")
+        col_px, col_py = st.columns(2)
+        panel_x_2d = col_px.number_input("X (Tủ)", value=0.0, key="px_2d")
+        panel_y_2d = col_py.number_input("Y (Tủ)", value=0.0, key="py_2d")
+        wastage_percent_2d = st.number_input("Hao hụt cáp (%)", min_value=0, value=20, step=5, key="wast_2d")
 
-        with st.form("form_edit_2d"):
-            st.write("📋 **Tọa độ Thiết bị (Chỉnh tay nếu đè lên vật cản):**")
-            edited_dets_2d = st.data_editor(st.session_state.det_data_2d, num_rows="dynamic", use_container_width=True, key="ed_dets_2d_manual")
+    st.markdown("---")
+    
+    # --- BƯỚC 2: KHÔNG GIAN LÀM VIỆC (SIDE-BY-SIDE) ---
+    if bg_file is None:
+        st.info("👆 Vui lòng tải lên một bản vẽ mặt bằng ở khung phía trên để bắt đầu làm việc.")
+    else:
+        # CHIA MÀN HÌNH LÀM 2 CỘT (Trái Form - Phải Hình)
+        col_work_left, col_work_right = st.columns([1.1, 1.4])
+        
+        with col_work_left:
+            st.header("2. Bố trí Thiết bị")
             
-            st.write("🚧 **Vẽ Vật cản (Chặn bán kính trên ảnh)**")
-            edited_obs_2d = st.data_editor(st.session_state.obs_data_2d, num_rows="dynamic", use_container_width=True, 
-                column_config={
-                    "Type": st.column_config.SelectboxColumn("Hình khối", options=["Cylinder", "Box", "Sphere"]),
-                    "Role": st.column_config.SelectboxColumn("Thuộc tính", options=["Vật cản đặc (Che khí)", "Trang trí 3D (Xuyên thấu)"]),
-                    "Z_base": st.column_config.NumberColumn("Cao độ Z đáy (m)", default=0.0)
-                }, key="ed_obs_2d_manual")
-            
-            btn_update_2d = st.form_submit_button("🔄 XÁC NHẬN & CẬP NHẬT BẢN VẼ", type="secondary")
-            if btn_update_2d:
-                st.session_state.det_data_2d = edited_dets_2d
-                st.session_state.obs_data_2d = edited_obs_2d
-                st.rerun()
+            with st.expander("⚙️ Danh sách Thiết bị (Mở để rải tự động)", expanded=False):
+                edited_auto_config_2d = st.data_editor(st.session_state.auto_config_2d, num_rows="dynamic", use_container_width=True, 
+                    column_config={"Color": st.column_config.SelectboxColumn("Màu", options=["cyan", "magenta", "yellow", "lime", "red"])}, key="ed_cfg_2d_auto")
+                st.session_state.auto_config_2d = edited_auto_config_2d
+                
+                if st.button("🚀 Tạo lưới phủ tự động", type="primary", use_container_width=True):
+                    new_dets_2d = []
+                    for _, row_cfg in edited_auto_config_2d.iterrows():
+                        spacing = row_cfg["Radius"] * 1.5 
+                        nx, ny = max(1, math.ceil(bg_real_width / spacing)), max(1, math.ceil(bg_real_height / spacing))
+                        count = 1
+                        for x in np.linspace(spacing/2, bg_real_width - spacing/2, nx):
+                            for y in np.linspace(spacing/2, bg_real_height - spacing/2, ny):
+                                new_dets_2d.append({"ID": f"{row_cfg['Model']} ({count:02d})", "Model": row_cfg['Model'], "Gas": row_cfg['Target Gas'], "X": round(x, 1), "Y": round(y, 1), "Radius": row_cfg["Radius"], "Color": row_cfg["Color"]})
+                                count += 1
+                    st.session_state.det_data_2d = pd.DataFrame(new_dets_2d)
+                    st.rerun()
 
-    # === THÊM BẢN XEM TRƯỚC (LIVE PREVIEW) CHO TAB 2 TẠI ĐÂY ===
-    if bg_file is not None:
-        st.markdown("### 👁️ Bản xem trước Mặt bằng (Live Preview)")
-        st.info("💡 Đây là bản xem trước tốc độ cao. Các vật cản che chắn sẽ được tính toán bóng mờ điểm mù chi tiết khi bạn bấm nút **CHẠY MÔ PHỎNG** bên dưới.")
-        
-        img = Image.open(bg_file)
-        fig_prev, ax_prev = plt.subplots(figsize=(10, 6))
-        
-        # 1. Vẽ nền bản vẽ
-        ax_prev.imshow(img, extent=[0, bg_real_width, 0, bg_real_height])
-        
-        # 2. Vẽ Tủ điều khiển
-        ax_prev.plot(panel_x_2d, panel_y_2d, 's', color='red', markersize=12, markeredgecolor='black')
-        ax_prev.text(panel_x_2d + 0.3, panel_y_2d + 0.3, "TỦ TT", color='red', fontweight='bold', bbox=dict(facecolor='white', alpha=0.7, edgecolor='none', pad=1))
-        
-        # 3. Vẽ Vật cản nháp (Gạch sọc để phân biệt)
-        obs_polys_preview = create_obstacle_polys(st.session_state.obs_data_2d)
-        for obs in obs_polys_preview:
-            ox, oy = obs.exterior.xy
-            ax_prev.fill(ox, oy, color='gray', alpha=0.6, hatch='//')
+            with st.form("form_edit_2d"):
+                st.write("📋 **Tọa độ Thiết bị:**")
+                edited_dets_2d = st.data_editor(st.session_state.det_data_2d, num_rows="dynamic", use_container_width=True, key="ed_dets_2d_manual", height=250)
+                
+                st.write("🚧 **Vẽ Vật cản (Tạo bóng mờ trên ảnh):**")
+                edited_obs_2d = st.data_editor(st.session_state.obs_data_2d, num_rows="dynamic", use_container_width=True, 
+                    column_config={
+                        "Type": st.column_config.SelectboxColumn("Hình khối", options=["Cylinder", "Box", "Sphere"]),
+                        "Role": st.column_config.SelectboxColumn("Thuộc tính", options=["Vật cản đặc (Che khí)", "Trang trí 3D (Xuyên thấu)"]),
+                        "Z_base": st.column_config.NumberColumn("Cao độ Z đáy", default=0.0)
+                    }, key="ed_obs_2d_manual", height=150)
+                
+                btn_update_2d = st.form_submit_button("🔄 XÁC NHẬN & CẬP NHẬT PREVIEW", type="secondary", use_container_width=True)
+                if btn_update_2d:
+                    st.session_state.det_data_2d = edited_dets_2d
+                    st.session_state.obs_data_2d = edited_obs_2d
+                    st.rerun()
+
+        # HIỂN THỊ HÌNH ẢNH Ở CỘT BÊN PHẢI (Không cần cuộn chuột)
+        with col_work_right:
+            st.markdown("### 👁️ Bản xem trước (Live Preview)")
             
-        # 4. Vẽ Đầu dò (Circle bán trong suốt, không cần chạy hàm bóng mờ nặng)
-        valid_colors = mcolors.CSS4_COLORS
-        for _, det in st.session_state.det_data_2d.iterrows():
-            if pd.isna(det['X']) or pd.isna(det['Y']): continue
-            c = det['Color'].lower() if isinstance(det['Color'], str) and det['Color'].lower() in valid_colors else 'blue'
-            r = det['Radius'] if not pd.isna(det['Radius']) else 5.0
+            img = Image.open(bg_file)
+            fig_prev, ax_prev = plt.subplots(figsize=(10, 7.5)) # Tỷ lệ khung hình đẹp
             
-            # Phủ một lớp màu mờ thể hiện bán kính
-            ax_prev.add_patch(plt.Circle((det['X'], det['Y']), r, color=c, fill=True, alpha=0.25))
-            ax_prev.add_patch(plt.Circle((det['X'], det['Y']), r, color=c, fill=False, linestyle='--', lw=1.5))
+            ax_prev.imshow(img, extent=[0, bg_real_width, 0, bg_real_height])
             
-            # Chấm điểm trung tâm
-            ax_prev.plot(det['X'], det['Y'], '^', color=c, markersize=10, markeredgecolor='black')
-            ax_prev.text(det['X']+0.3, det['Y']+0.3, str(det['ID']), fontsize=8, bbox=dict(facecolor='white', alpha=0.7, edgecolor='none', pad=1))
+            ax_prev.plot(panel_x_2d, panel_y_2d, 's', color='red', markersize=12, markeredgecolor='black')
+            ax_prev.text(panel_x_2d + 0.3, panel_y_2d + 0.3, "TỦ TT", color='red', fontweight='bold', bbox=dict(facecolor='white', alpha=0.7, edgecolor='none', pad=1))
             
-        ax_prev.set_xlim(0, bg_real_width)
-        ax_prev.set_ylim(0, bg_real_height)
-        ax_prev.set_aspect('equal')
-        ax_prev.grid(True, linestyle=':', alpha=0.5)
-        
-        st.pyplot(fig_prev)
+            obs_polys_preview = create_obstacle_polys(st.session_state.obs_data_2d)
+            for obs in obs_polys_preview:
+                ox, oy = obs.exterior.xy
+                ax_prev.fill(ox, oy, color='gray', alpha=0.6, hatch='//')
+                
+            valid_colors = mcolors.CSS4_COLORS
+            for _, det in st.session_state.det_data_2d.iterrows():
+                if pd.isna(det['X']) or pd.isna(det['Y']): continue
+                c = det['Color'].lower() if isinstance(det['Color'], str) and det['Color'].lower() in valid_colors else 'blue'
+                r = det['Radius'] if not pd.isna(det['Radius']) else 5.0
+                
+                ax_prev.add_patch(plt.Circle((det['X'], det['Y']), r, color=c, fill=True, alpha=0.25))
+                ax_prev.add_patch(plt.Circle((det['X'], det['Y']), r, color=c, fill=False, linestyle='--', lw=1.5))
+                
+                ax_prev.plot(det['X'], det['Y'], '^', color=c, markersize=10, markeredgecolor='black')
+                ax_prev.text(det['X']+0.3, det['Y']+0.3, str(det['ID']), fontsize=8, bbox=dict(facecolor='white', alpha=0.7, edgecolor='none', pad=1))
+                
+            ax_prev.set_xlim(0, bg_real_width)
+            ax_prev.set_ylim(0, bg_real_height)
+            ax_prev.set_aspect('equal')
+            ax_prev.grid(True, linestyle=':', alpha=0.5)
+            
+            st.pyplot(fig_prev)
 
     st.markdown("---")
     st.header("3. 📊 Phân tích & Xuất Báo cáo")
@@ -641,4 +645,3 @@ st.markdown("""
         Designed and programmed by <b>trggiang</b>.
     </div>
 """, unsafe_allow_html=True)
-
