@@ -54,7 +54,6 @@ if 'auto_config' not in st.session_state:
         {"Target Gas": "O2", "Layer": "Khí Trung bình (Vùng thở)", "Model": "OX-600", "Radius": 4.0, "Color": "lime"},
         {"Target Gas": "H2S", "Layer": "Khí Nặng (Sát sàn)", "Model": "GD-70D (Electro)", "Radius": 4.0, "Color": "magenta"}
     ])
-# DỮ LIỆU SMART TARGETING (TAB 1)
 if 'leak_data' not in st.session_state:
     st.session_state.leak_data = pd.DataFrame([
         {"Tên Khu vực/Thiết bị": "Bơm hóa chất 01", "Gas": "H2S", "X": 3.0, "Y": 3.0, "Bán kính rủi ro (m)": 4.0}
@@ -62,7 +61,7 @@ if 'leak_data' not in st.session_state:
 if 'det_data' not in st.session_state:
     st.session_state.det_data = pd.DataFrame(columns=["ID", "Model", "Gas", "X", "Y", "Z", "Radius", "Color"])
 
-# DỮ LIỆU CHO TAB 2
+# TAB 2 DATA
 if 'det_data_2d' not in st.session_state:
     st.session_state.det_data_2d = pd.DataFrame(columns=["ID", "Model", "Gas", "X", "Y", "Radius", "Color"])
 if 'obs_data_2d' not in st.session_state:
@@ -74,7 +73,6 @@ if 'auto_config_2d' not in st.session_state:
         {"Target Gas": "CH4", "Model": "SD-1", "Radius": 5.0, "Color": "cyan"},
         {"Target Gas": "O2", "Model": "OX-600", "Radius": 4.0, "Color": "lime"}
     ])
-# DỮ LIỆU SMART TARGETING (TAB 2)
 if 'leak_data_2d' not in st.session_state:
     st.session_state.leak_data_2d = pd.DataFrame(columns=["Tên Khu vực/Thiết bị", "Gas", "X", "Y", "Bán kính rủi ro (m)"])
 
@@ -153,7 +151,6 @@ def generate_2d_plot(room_poly, obs_polys, df_dets_group, df_leaks, gas_name, px
         ox, oy = obs.exterior.xy
         ax.fill(ox, oy, color='gray', alpha=0.8, zorder=4)
 
-    # VẼ VÙNG NGUY HIỂM RÒ RỈ (LEAK SOURCES)
     if df_leaks is not None and not df_leaks.empty:
         leaks_for_gas = df_leaks[df_leaks['Gas'] == gas_name]
         for _, leak in leaks_for_gas.iterrows():
@@ -192,14 +189,12 @@ def generate_plotly_3d_complex(room_poly, rz, obs_polys, df_obs, df_dets, df_lea
         u, v = np.mgrid[0:2*np.pi:15j, 0:np.pi:10j]
         return r*np.cos(u)*np.sin(v)+x0, r*np.sin(u)*np.sin(v)+y0, r*np.cos(v)+z0
 
-    # VẼ VÙNG NGUY CƠ RÒ RỈ (3D)
     leak_leg_added = False
     if df_leaks is not None and not df_leaks.empty:
         for _, leak in df_leaks.iterrows():
             if pd.isna(leak['X']) or pd.isna(leak['Y']): continue
             show_leak_leg = not leak_leg_added
             r_risk = leak.get('Bán kính rủi ro (m)', 3.0)
-            
             z_grid, theta = np.mgrid[0:rz:2j, 0:2*np.pi:20j]
             x_cyl = r_risk*np.cos(theta)+leak['X']
             y_cyl = r_risk*np.sin(theta)+leak['Y']
@@ -224,7 +219,6 @@ def generate_plotly_3d_complex(room_poly, rz, obs_polys, df_obs, df_dets, df_lea
         show_obs_leg = not obs_leg_added
         z_base = obs.get('Z_base', 0.0)
         h = obs.get('Height', 4.0)
-        
         color_scale = 'Greys' if obs.get('Role') == 'Vật cản đặc (Che khí)' else 'Blues'
         solid_color = 'gray' if obs.get('Role') == 'Vật cản đặc (Che khí)' else 'lightblue'
         
@@ -238,7 +232,8 @@ def generate_plotly_3d_complex(room_poly, rz, obs_polys, df_obs, df_dets, df_lea
             w = obs['Width_Radius']
             l = obs['Length'] if not pd.isna(obs['Length']) else 0
             ang = obs.get('Angle', 0) if not pd.isna(obs.get('Angle', 0)) else 0
-            box_poly = Polygon([(obs['X']-w/2, obs['Y']-l/2), (obs['X']+w/2, obs['Y']-l/2), (obs['X']+w/2, obs['Y']+l/2), (obs['X']-w/2, obs['Y']+l/2)])
+            box_poly = Polygon([(obs['X']-w/2, obs['Y']-l/2), (obs['X']+w/2, obs['Y']-l/2),
+                           (obs['X']+w/2, obs['Y']+l/2), (obs['X']-w/2, obs['Y']+l/2)])
             bx, by = affinity.rotate(box_poly, ang, origin='center').exterior.xy
             bx, by = list(bx)[:-1], list(by)[:-1] 
             x_box, y_box = bx * 2, by * 2
@@ -354,7 +349,7 @@ def generate_full_word_report(figs_dict, img_3d_bytes, bom_df, p_name, c_name, a
         for run in hdr[i].paragraphs[0].runs: run.font.name = 'Arial'; run.font.bold = True
     for _, row in bom_df.iterrows():
         row_cells = table.add_row().cells
-        row_cells[0].text, row_cells[1].text, row_cells[2].text, row_cells[3].text = str(row['STT']), str(row['Hạng mục Thiết bị & Vật tư']), str(row['Đơn vị']), f"{int(row['Khối lượng']):,}"
+        row_cells[0].text, row_cells[1].text, row_cells[2].text, row_cells[3].text = str(row['STT']), str(row['Hạng mục thiết bị']), str(row['Đơn vị']), f"{int(row['Khối lượng']):,}"
         for cell in row_cells:
             for p in cell.paragraphs:
                 for run in p.runs: run.font.name = 'Arial'
@@ -372,6 +367,8 @@ if app_mode == "1️⃣ Thiết kế Không gian Đa lớp (3D)":
     st.markdown("## 🧊 Chế độ Thiết kế Không gian 3D Chuyên sâu")
     
     col_input1, col_input2 = st.columns([1.2, 1.1])
+    
+    # ---------------- CỘT TRÁI (3D) ----------------
     with col_input1:
         st.header("1. Không gian & Tủ Trung Tâm")
         room_z = st.number_input("Chiều cao trần nhà xưởng (Z) - mét", min_value=1.0, value=5.0, key="z_3d")
@@ -392,16 +389,20 @@ if app_mode == "1️⃣ Thiết kế Không gian Đa lớp (3D)":
         with col_t3:
             if st.button("⨆ Mẫu Chữ U", use_container_width=True, key="btn_u"): st.session_state.room_data = pd.DataFrame({"X": [0, 20, 20, 15, 15, 5, 5, 0], "Y": [0, 0, 15, 15, 5, 5, 15, 15]}); st.rerun()
 
-        edited_room = st.data_editor(st.session_state.room_data, num_rows="dynamic", use_container_width=True, key="ed_room_3d")
+        # FORM ĐỊNH HÌNH PHÒNG
+        with st.form("form_room_3d"):
+            edited_room = st.data_editor(st.session_state.room_data, num_rows="dynamic", use_container_width=True, key="ed_room_3d")
+            if st.form_submit_button("🔄 Vẽ lại Phòng"):
+                st.session_state.room_data = edited_room
+                st.rerun()
         
-        # BẢN VẼ NHÁP PREVIEW
-        if len(edited_room) >= 3:
-            room_poly = Polygon(list(zip(edited_room['X'], edited_room['Y'])))
+        if len(st.session_state.room_data) >= 3:
+            room_poly = Polygon(list(zip(st.session_state.room_data['X'], st.session_state.room_data['Y'])))
             fig_grid, ax_grid = plt.subplots(figsize=(6, 5))
             x_ext, y_ext = room_poly.exterior.xy
             ax_grid.plot(x_ext, y_ext, color='#333333', linewidth=2)
             ax_grid.fill(x_ext, y_ext, alpha=0.1, color='blue')
-            for idx, row in edited_room.iterrows():
+            for idx, row in st.session_state.room_data.iterrows():
                 if pd.isna(row['X']) or pd.isna(row['Y']): continue
                 ax_grid.plot(row['X'], row['Y'], 'ro', markersize=6, zorder=10)
                 ax_grid.text(row['X'] + 0.3, row['Y'] + 0.3, f"P{idx}", color='red', fontweight='bold', fontsize=11, zorder=11)
@@ -413,12 +414,11 @@ if app_mode == "1️⃣ Thiết kế Không gian Đa lớp (3D)":
                 ox, oy = obs.exterior.xy
                 ax_grid.fill(ox, oy, color='gray', alpha=0.5)
             
-            # Hiển thị Điểm Rủi ro trên nháp 3D
             for _, leak in st.session_state.leak_data.iterrows():
                 if pd.isna(leak['X']) or pd.isna(leak['Y']): continue
                 ax_grid.plot(leak['X'], leak['Y'], 'rx', markersize=10, zorder=15)
                 ax_grid.add_patch(plt.Circle((leak['X'], leak['Y']), leak.get('Bán kính rủi ro (m)', 3.0), color='red', fill=False, linestyle=':', zorder=14))
-
+                
             for _, det in st.session_state.det_data.iterrows():
                 if pd.isna(det['X']) or pd.isna(det['Y']): continue
                 c = det['Color'].lower() if isinstance(det['Color'], str) and det['Color'].lower() in mcolors.CSS4_COLORS else 'blue'
@@ -430,20 +430,23 @@ if app_mode == "1️⃣ Thiết kế Không gian Đa lớp (3D)":
             st.error("Phòng cần ít nhất 3 góc!")
             room_poly = None
 
+    # ---------------- CỘT PHẢI (3D) ----------------
     with col_input2:
         st.header("2. Phân bổ Mục tiêu & Thiết bị")
         
-        with st.expander("🚨 Khai báo Nguồn Rủi ro (Smart Target)", expanded=True):
-            st.info("Nhập tọa độ Bơm/Van... Thuật toán rải tự động sẽ tập trung bao vây vùng này.")
-            edited_leak_3d = st.data_editor(st.session_state.leak_data, num_rows="dynamic", use_container_width=True, key="ed_leak_3d")
-            st.session_state.leak_data = edited_leak_3d
+        # FORM 1: CẤU HÌNH & TỰ ĐỘNG RẢI
+        with st.form("form_auto_3d"):
+            st.write("🚨 **Khai báo Nguồn Rủi ro (Smart Target)**")
+            edited_leak_3d = st.data_editor(st.session_state.leak_data, num_rows="dynamic", use_container_width=True)
 
-        with st.expander("⚙️ Cấu hình Phân hệ Khí (Rải tự động)", expanded=True):
+            st.write("⚙️ **Cấu hình Phân hệ Khí (Rải tự động)**")
             edited_auto_config = st.data_editor(st.session_state.auto_config, num_rows="dynamic", use_container_width=True,
-                column_config={"Layer": st.column_config.SelectboxColumn("Mặt phẳng", options=["Khí Nhẹ (Sát trần)", "Khí Trung bình (Vùng thở)", "Khí Nặng (Sát sàn)"]), "Color": st.column_config.SelectboxColumn("Màu", options=["cyan", "magenta", "yellow", "lime", "red"])}, key="ed_cfg_3d")
-            st.session_state.auto_config = edited_auto_config
+                column_config={"Layer": st.column_config.SelectboxColumn("Mặt phẳng", options=["Khí Nhẹ (Sát trần)", "Khí Trung bình (Vùng thở)", "Khí Nặng (Sát sàn)"]), "Color": st.column_config.SelectboxColumn("Màu", options=["cyan", "magenta", "yellow", "lime", "red"])})
 
-            if st.button("🚀 Tự động Rải Đầu dò (Smart Target)", type="primary"):
+            if st.form_submit_button("🚀 LƯU & TỰ ĐỘNG RẢI SMART TARGET", type="primary"):
+                st.session_state.leak_data = edited_leak_3d
+                st.session_state.auto_config = edited_auto_config
+                
                 if room_poly is not None:
                     new_dets = []
                     for _, row_cfg in edited_auto_config.iterrows():
@@ -473,20 +476,20 @@ if app_mode == "1️⃣ Thiết kế Không gian Đa lớp (3D)":
                     st.session_state.det_data = pd.DataFrame(new_dets)
                     st.rerun()
 
-        with st.form("form_edit_3d"):
+        # FORM 2: CHỈNH SỬA THỦ CÔNG
+        with st.form("form_manual_3d"):
             st.write("🚧 **Lắp ghép Không gian 3D (Bồn chứa / Đường ống)**")
             edited_obs = st.data_editor(st.session_state.obs_data, num_rows="dynamic", use_container_width=True, 
                 column_config={
                     "Type": st.column_config.SelectboxColumn("Hình khối", options=["Cylinder", "Box", "Sphere"]),
                     "Role": st.column_config.SelectboxColumn("Thuộc tính", options=["Vật cản đặc (Che khí)", "Trang trí 3D (Xuyên thấu)"]),
                     "Z_base": st.column_config.NumberColumn("Cao độ Z đáy", default=0.0)
-                }, key="ed_obs_3d")
+                })
             
             st.write("📋 **Bảng Tọa độ Đầu dò Thực tế:**")
-            edited_dets = st.data_editor(st.session_state.det_data, num_rows="dynamic", use_container_width=True, key="ed_dets_3d")
+            edited_dets = st.data_editor(st.session_state.det_data, num_rows="dynamic", use_container_width=True)
             
-            btn_update = st.form_submit_button("🔄 XÁC NHẬN & CẬP NHẬT BẢN VẼ", type="secondary")
-            if btn_update:
+            if st.form_submit_button("🔄 XÁC NHẬN & CẬP NHẬT BẢN VẼ", type="secondary"):
                 st.session_state.obs_data = edited_obs
                 st.session_state.det_data = edited_dets
                 st.rerun()
@@ -507,7 +510,6 @@ if app_mode == "1️⃣ Thiết kế Không gian Đa lớp (3D)":
         else:
             with st.spinner('Đang nội suy không gian 3D True-Space và kết xuất báo cáo...'):
                 obs_polys = create_obstacle_polys(st.session_state.obs_data)
-                
                 fig_3d = generate_plotly_3d_complex(room_poly, room_z, obs_polys, st.session_state.obs_data, st.session_state.det_data, st.session_state.leak_data, panel_x, panel_y, panel_z)
                 st.plotly_chart(fig_3d, use_container_width=True)
                 
@@ -562,20 +564,23 @@ elif app_mode == "2️⃣ Rải nhanh trên Bản vẽ 2D (Overlay)":
     else:
         col_work_left, col_work_right = st.columns([1.1, 1.4])
         
+        # ---------------- CỘT TRÁI (2D) ----------------
         with col_work_left:
             st.header("2. Phân bổ Mục tiêu & Thiết bị")
             
-            with st.expander("🚨 Khai báo Nguồn Rủi ro (Smart Target)", expanded=True):
-                st.info("Nhập tọa độ Bơm/Van... Thuật toán Smart Target sẽ tự động bao vây vùng này.")
-                edited_leak_2d = st.data_editor(st.session_state.leak_data_2d, num_rows="dynamic", use_container_width=True, key="ed_leak_2d")
-                st.session_state.leak_data_2d = edited_leak_2d
-            
-            with st.expander("⚙️ Danh sách Thiết bị (Mở để rải tự động)", expanded=False):
-                edited_auto_config_2d = st.data_editor(st.session_state.auto_config_2d, num_rows="dynamic", use_container_width=True, 
-                    column_config={"Color": st.column_config.SelectboxColumn("Màu", options=["cyan", "magenta", "yellow", "lime", "red"])}, key="ed_cfg_2d_auto")
-                st.session_state.auto_config_2d = edited_auto_config_2d
+            # FORM 1: CẤU HÌNH & TỰ ĐỘNG RẢI
+            with st.form("form_auto_2d"):
+                st.write("🚨 **Khai báo Nguồn Rủi ro (Smart Target)**")
+                edited_leak_2d = st.data_editor(st.session_state.leak_data_2d, num_rows="dynamic", use_container_width=True)
                 
-                if st.button("🚀 Tự động Rải Đầu dò (Smart Target)", type="primary", use_container_width=True):
+                st.write("⚙️ **Danh sách Thiết bị (Rải tự động)**")
+                edited_auto_config_2d = st.data_editor(st.session_state.auto_config_2d, num_rows="dynamic", use_container_width=True, 
+                    column_config={"Color": st.column_config.SelectboxColumn("Màu", options=["cyan", "magenta", "yellow", "lime", "red"])})
+                
+                if st.form_submit_button("🚀 LƯU & TỰ ĐỘNG RẢI SMART TARGET", type="primary", use_container_width=True):
+                    st.session_state.leak_data_2d = edited_leak_2d
+                    st.session_state.auto_config_2d = edited_auto_config_2d
+                    
                     new_dets_2d = []
                     bg_poly = Polygon([(0,0), (bg_real_width,0), (bg_real_width, bg_real_height), (0, bg_real_height)])
                     for _, row_cfg in edited_auto_config_2d.iterrows():
@@ -599,23 +604,24 @@ elif app_mode == "2️⃣ Rải nhanh trên Bản vẽ 2D (Overlay)":
                     st.session_state.det_data_2d = pd.DataFrame(new_dets_2d)
                     st.rerun()
 
-            with st.form("form_edit_2d"):
+            # FORM 2: CHỈNH SỬA THỦ CÔNG
+            with st.form("form_manual_2d"):
                 st.write("📋 **Tọa độ Thiết bị (Chỉnh tay nếu đè lên vật cản):**")
-                edited_dets_2d = st.data_editor(st.session_state.det_data_2d, num_rows="dynamic", use_container_width=True, key="ed_dets_2d_manual", height=250)
+                edited_dets_2d = st.data_editor(st.session_state.det_data_2d, num_rows="dynamic", use_container_width=True, height=200)
                 
                 st.write("🚧 **Vẽ Vật cản (Tạo bóng mờ trên ảnh):**")
                 edited_obs_2d = st.data_editor(st.session_state.obs_data_2d, num_rows="dynamic", use_container_width=True, 
                     column_config={
                         "Type": st.column_config.SelectboxColumn("Hình khối", options=["Cylinder", "Box", "Sphere"]),
                         "Role": st.column_config.SelectboxColumn("Thuộc tính", options=["Vật cản đặc (Che khí)", "Trang trí 3D (Xuyên thấu)"])
-                    }, key="ed_obs_2d_manual", height=150)
+                    }, height=150)
                 
-                btn_update_2d = st.form_submit_button("🔄 XÁC NHẬN & CẬP NHẬT PREVIEW", type="secondary", use_container_width=True)
-                if btn_update_2d:
+                if st.form_submit_button("🔄 XÁC NHẬN & CẬP NHẬT PREVIEW", type="secondary", use_container_width=True):
                     st.session_state.det_data_2d = edited_dets_2d
                     st.session_state.obs_data_2d = edited_obs_2d
                     st.rerun()
 
+        # ---------------- CỘT PHẢI (2D LIVE PREVIEW) ----------------
         with col_work_right:
             st.markdown("### 👁️ Bản xem trước (Live Preview)")
             
@@ -631,7 +637,6 @@ elif app_mode == "2️⃣ Rải nhanh trên Bản vẽ 2D (Overlay)":
                 ox, oy = obs.exterior.xy
                 ax_prev.fill(ox, oy, color='gray', alpha=0.6, hatch='//')
                 
-            # Hiển thị Điểm Rủi ro trên Preview 2D
             for _, leak in st.session_state.leak_data_2d.iterrows():
                 if pd.isna(leak['X']) or pd.isna(leak['Y']): continue
                 ax_prev.plot(leak['X'], leak['Y'], 'rx', markersize=10, zorder=15)
@@ -663,7 +668,7 @@ elif app_mode == "2️⃣ Rải nhanh trên Bản vẽ 2D (Overlay)":
 
     if st.button("🚀 CHẠY MÔ PHỎNG & TẠO FILE BÁO CÁO (2D)", type='primary', use_container_width=True):
         if bg_file is None or st.session_state.det_data_2d.dropna(subset=['X', 'Y']).empty:
-            st.error("Lỗi: Bạn cần Upload bản vẽ và rải đầu dò (nhớ bấm nút Cập nhật)!")
+            st.error("Lỗi: Bạn cần Upload bản vẽ và rải đầu dò trước khi chạy!")
         else:
             with st.spinner('Đang ép lớp nhiệt (Heatmap) lên bản vẽ và tính toán bóng mờ...'):
                 img = Image.open(bg_file)
