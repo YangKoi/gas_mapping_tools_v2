@@ -41,11 +41,15 @@ with st.sidebar:
 
 st.title("🛡️ Riken Viet - Hệ thống Thiết kế & Dự toán Vùng phủ Khí")
 
-# --- KHỞI TẠO DỮ LIỆU ---
+# --- KHỞI TẠO DỮ LIỆU ĐÃ NÂNG CẤP TRUE-SPACE 3D ---
 if 'room_data' not in st.session_state:
     st.session_state.room_data = pd.DataFrame({"X": [0, 15, 15, 0], "Y": [0, 0, 10, 10]}) 
 if 'obs_data' not in st.session_state:
-    st.session_state.obs_data = pd.DataFrame([{"Type": "Cylinder", "X": 7.5, "Y": 5.0, "Width_Radius": 1.5, "Length": 0.0, "Height": 4.0, "Angle": 0}])
+    # Mẫu demo: 1 bồn chứa đặc và 1 van xả trang trí lơ lửng
+    st.session_state.obs_data = pd.DataFrame([
+        {"Type": "Cylinder", "Role": "Vật cản đặc (Che khí)", "X": 7.5, "Y": 5.0, "Z_base": 0.0, "Width_Radius": 1.5, "Length": 0.0, "Height": 4.0, "Angle": 0},
+        {"Type": "Box", "Role": "Trang trí 3D (Xuyên thấu)", "X": 9.2, "Y": 5.0, "Z_base": 2.0, "Width_Radius": 0.6, "Length": 0.6, "Height": 0.5, "Angle": 0}
+    ])
 if 'auto_config' not in st.session_state:
     st.session_state.auto_config = pd.DataFrame([
         {"Target Gas": "CH4", "Layer": "Khí Nhẹ (Sát trần)", "Model": "SD-1 (Catalytic)", "Radius": 5.0, "Color": "cyan"},
@@ -58,12 +62,11 @@ if 'det_data' not in st.session_state:
 if 'det_data_2d' not in st.session_state:
     st.session_state.det_data_2d = pd.DataFrame(columns=["ID", "Model", "Gas", "X", "Y", "Radius", "Color"])
 if 'obs_data_2d' not in st.session_state:
-    st.session_state.obs_data_2d = pd.DataFrame([{"Type": "Box", "X": 15.0, "Y": 10.0, "Width_Radius": 5.0, "Length": 5.0, "Angle": 0}])
-if 'auto_config_2d' not in st.session_state:
-    st.session_state.auto_config_2d = pd.DataFrame([
-        {"Target Gas": "CH4", "Model": "SD-1", "Radius": 5.0, "Color": "cyan"},
-        {"Target Gas": "O2", "Model": "OX-600", "Radius": 4.0, "Color": "lime"}
+    st.session_state.obs_data_2d = pd.DataFrame([
+        {"Type": "Box", "Role": "Vật cản đặc (Che khí)", "X": 15.0, "Y": 10.0, "Z_base": 0.0, "Width_Radius": 5.0, "Length": 5.0, "Height": 0.0, "Angle": 0}
     ])
+if 'auto_config_2d' not in st.session_state:
+    st.session_state.auto_config_2d = pd.DataFrame([{"Target Gas": "CH4", "Model": "SD-1", "Radius": 5.0, "Color": "cyan"}])
 
 
 # ==========================================
@@ -73,7 +76,13 @@ def create_obstacle_polys(df_obs):
     obs_polys = []
     for _, row in df_obs.iterrows():
         if pd.isna(row['X']) or pd.isna(row['Y']) or pd.isna(row['Width_Radius']): continue
-        if row['Type'] == 'Cylinder':
+        
+        # BỘ LỌC THÔNG MINH: Chỉ tính toán che chắn 2D cho Vật cản đặc
+        role = row.get('Role', 'Vật cản đặc (Che khí)')
+        if role != 'Vật cản đặc (Che khí)': 
+            continue
+            
+        if row['Type'] in ['Cylinder', 'Sphere']:
             obs_polys.append(Point(row['X'], row['Y']).buffer(row['Width_Radius']))
         elif row['Type'] == 'Box':
             w = row['Width_Radius']
@@ -83,15 +92,6 @@ def create_obstacle_polys(df_obs):
                            (row['X']+w/2, row['Y']+l/2), (row['X']-w/2, row['Y']+l/2)])
             obs_polys.append(affinity.rotate(box, ang, origin='center'))
     return obs_polys
-
-def check_collision_shapely(df_dets, obs_polys):
-    collisions = []
-    if not obs_polys or df_dets.empty: return collisions
-    for _, det in df_dets.iterrows():
-        if pd.isna(det['X']) or pd.isna(det['Y']): continue
-        pt = Point(det['X'], det['Y'])
-        if any(poly.contains(pt) for poly in obs_polys): collisions.append(det['ID'])
-    return collisions
 
 def generate_2d_plot(room_poly, obs_polys, df_dets_group, gas_name, px, py, bg_img=None, b_w=0, b_h=0):
     minx, miny, maxx, maxy = room_poly.bounds
@@ -159,6 +159,9 @@ def generate_2d_plot(room_poly, obs_polys, df_dets_group, gas_name, px, py, bg_i
     ax.axis('equal'); ax.grid(True, linestyle=':', alpha=0.5)
     return fig, ty_le
 
+# ==========================================
+# ĐỘNG CƠ DỰNG HÌNH LẮP GHÉP TRUE-SPACE 3D
+# ==========================================
 def generate_plotly_3d_complex(room_poly, rz, obs_polys, df_obs, df_dets, px, py, pz):
     fig = go.Figure()
     rx, ry = room_poly.exterior.xy
@@ -189,19 +192,41 @@ def generate_plotly_3d_complex(room_poly, rz, obs_polys, df_obs, df_dets, px, py
     obs_leg_added = False
     for i, (_, obs) in enumerate(df_obs.iterrows()):
         if pd.isna(obs['X']) or pd.isna(obs['Y']) or pd.isna(obs['Width_Radius']): continue
+        
         show_obs_leg = not obs_leg_added
+        z_base = obs.get('Z_base', 0.0)
+        h = obs.get('Height', 4.0)
+        
+        # Chọn màu sắc theo thuộc tính: Đặc = Xám đậm, Trang trí = Xanh kim loại nhạt
+        color_scale = 'Greys' if obs.get('Role') == 'Vật cản đặc (Che khí)' else 'Blues'
+        solid_color = 'gray' if obs.get('Role') == 'Vật cản đặc (Che khí)' else 'lightblue'
+        
         if obs['Type'] == 'Cylinder':
-            z_grid, theta = np.mgrid[0:obs.get('Height', 4):2j, 0:2*np.pi:20j]
-            fig.add_trace(go.Surface(x=obs['Width_Radius']*np.cos(theta)+obs['X'], y=obs['Width_Radius']*np.sin(theta)+obs['Y'], z=z_grid, opacity=1.0, showscale=False, colorscale='Greys', name="Vật cản / Bồn chứa", legendgroup='obs', showlegend=show_obs_leg))
+            z_grid, theta = np.mgrid[z_base:(z_base+h):2j, 0:2*np.pi:20j]
+            x_cyl = obs['Width_Radius']*np.cos(theta)+obs['X']
+            y_cyl = obs['Width_Radius']*np.sin(theta)+obs['Y']
+            fig.add_trace(go.Surface(x=x_cyl, y=y_cyl, z=z_grid, opacity=1.0, showscale=False, colorscale=color_scale, name="Cấu trúc Thiết bị", legendgroup='obs', showlegend=show_obs_leg))
             obs_leg_added = True
+            
         elif obs['Type'] == 'Box':
-            box_2d = obs_polys[i]
-            bx, by = box_2d.exterior.xy
+            w = obs['Width_Radius']
+            l = obs['Length'] if not pd.isna(obs['Length']) else 0
+            ang = obs.get('Angle', 0) if not pd.isna(obs.get('Angle', 0)) else 0
+            box_poly = Polygon([(obs['X']-w/2, obs['Y']-l/2), (obs['X']+w/2, obs['Y']-l/2),
+                           (obs['X']+w/2, obs['Y']+l/2), (obs['X']-w/2, obs['Y']+l/2)])
+            bx, by = affinity.rotate(box_poly, ang, origin='center').exterior.xy
             bx, by = list(bx)[:-1], list(by)[:-1] 
             x_box, y_box = bx * 2, by * 2
-            z_box = [0]*4 + [obs.get('Height', 4)]*4
+            z_box = [z_base]*4 + [z_base + h]*4
             ii, jj, kk = [7,0,0,0,4,4,6,6,4,0,3,2], [3,4,1,2,5,6,5,2,0,1,6,3], [0,7,2,3,6,7,1,1,5,5,7,6]
-            fig.add_trace(go.Mesh3d(x=x_box, y=y_box, z=z_box, i=ii, j=jj, k=kk, color='gray', opacity=1.0, name="Vật cản / Bồn chứa", legendgroup='obs', showlegend=show_obs_leg))
+            fig.add_trace(go.Mesh3d(x=x_box, y=y_box, z=z_box, i=ii, j=jj, k=kk, color=solid_color, opacity=1.0, name="Cấu trúc Thiết bị", legendgroup='obs', showlegend=show_obs_leg))
+            obs_leg_added = True
+            
+        elif obs['Type'] == 'Sphere':
+            # Đối với khối cầu, Z_base là tâm điểm của quả cầu
+            sx, sy, sz = get_sphere(obs['X'], obs['Y'], z_base, obs['Width_Radius'])
+            sph_color = [[0, '#888888'], [1, '#888888']] if obs.get('Role') == 'Vật cản đặc (Che khí)' else [[0, '#99bbff'], [1, '#99bbff']]
+            fig.add_trace(go.Surface(x=sx, y=sy, z=sz, opacity=1.0, showscale=False, colorscale=sph_color, name="Cấu trúc Thiết bị", legendgroup='obs', showlegend=show_obs_leg))
             obs_leg_added = True
 
     minx, miny, maxx, maxy = room_poly.bounds
@@ -359,16 +384,11 @@ if app_mode == "1️⃣ Thiết kế Không gian Đa lớp (3D)":
             ax_grid.plot(panel_x, panel_y, 's', color='red', markersize=12, markeredgecolor='black', zorder=12)
             ax_grid.text(panel_x + 0.5, panel_y + 0.5, "TỦ TT", color='red', fontweight='bold', zorder=12)
             
-            for _, obs in st.session_state.obs_data.iterrows():
-                if pd.isna(obs['X']) or pd.isna(obs['Y']) or pd.isna(obs['Width_Radius']): continue
-                if obs['Type'] == 'Cylinder': ax_grid.add_patch(plt.Circle((obs['X'], obs['Y']), obs['Width_Radius'], color='gray', alpha=0.5))
-                elif obs['Type'] == 'Box':
-                    w, l = obs['Width_Radius'], obs['Length'] if not pd.isna(obs['Length']) else 0
-                    ang = obs.get('Angle', 0) if not pd.isna(obs.get('Angle', 0)) else 0
-                    box = Polygon([(obs['X']-w/2, obs['Y']-l/2), (obs['X']+w/2, obs['Y']-l/2),
-                                   (obs['X']+w/2, obs['Y']+l/2), (obs['X']-w/2, obs['Y']+l/2)])
-                    bx, by = affinity.rotate(box, ang, origin='center').exterior.xy
-                    ax_grid.fill(bx, by, color='gray', alpha=0.5)
+            # Tính toán Vẽ nháp 2D cho Vật Cản
+            obs_polys_draft = create_obstacle_polys(st.session_state.obs_data)
+            for obs in obs_polys_draft:
+                ox, oy = obs.exterior.xy
+                ax_grid.fill(ox, oy, color='gray', alpha=0.5)
             
             for _, det in st.session_state.det_data.iterrows():
                 if pd.isna(det['X']) or pd.isna(det['Y']): continue
@@ -384,7 +404,7 @@ if app_mode == "1️⃣ Thiết kế Không gian Đa lớp (3D)":
     with col_input2:
         st.header("2. Bố trí Thiết bị & Khí (3D)")
         
-        with st.expander("⚙️ Cấu hình Các Phân hệ Khí (Tự động rải)", expanded=True):
+        with st.expander("⚙️ Cấu hình Phân hệ Khí (Rải tự động)", expanded=True):
             edited_auto_config = st.data_editor(st.session_state.auto_config, num_rows="dynamic", use_container_width=True,
                 column_config={
                     "Layer": st.column_config.SelectboxColumn("Mặt phẳng", options=["Khí Nhẹ (Sát trần)", "Khí Trung bình (Vùng thở)", "Khí Nặng (Sát sàn)"]), 
@@ -396,10 +416,9 @@ if app_mode == "1️⃣ Thiết kế Không gian Đa lớp (3D)":
                 if room_poly is not None:
                     new_dets = []
                     for _, row_cfg in edited_auto_config.iterrows():
-                        # Lọc cao độ Z thông minh
                         if "Nhẹ" in row_cfg["Layer"]: z_val = max(room_z - 0.5, 0.5)
                         elif "Nặng" in row_cfg["Layer"]: z_val = 0.5
-                        else: z_val = 1.5 # Khí trung bình (vùng thở)
+                        else: z_val = 1.5 
                         
                         spacing = row_cfg["Radius"] * 1.5 
                         minx, miny, maxx, maxy = room_poly.bounds
@@ -414,8 +433,13 @@ if app_mode == "1️⃣ Thiết kế Không gian Đa lớp (3D)":
                     st.rerun()
 
         with st.form("form_edit_3d"):
-            st.write("🚧 **Danh sách Vật cản (Cylinder / Box)**")
-            edited_obs = st.data_editor(st.session_state.obs_data, num_rows="dynamic", use_container_width=True, column_config={"Type": st.column_config.SelectboxColumn("Loại", options=["Cylinder", "Box"])}, key="ed_obs_3d")
+            st.write("🚧 **Lắp ghép Không gian 3D (Bồn chứa / Đường ống)**")
+            edited_obs = st.data_editor(st.session_state.obs_data, num_rows="dynamic", use_container_width=True, 
+                column_config={
+                    "Type": st.column_config.SelectboxColumn("Hình khối", options=["Cylinder", "Box", "Sphere"]),
+                    "Role": st.column_config.SelectboxColumn("Thuộc tính", options=["Vật cản đặc (Che khí)", "Trang trí 3D (Xuyên thấu)"]),
+                    "Z_base": st.column_config.NumberColumn("Cao độ Z đáy (m)", default=0.0)
+                }, key="ed_obs_3d")
             
             st.write("📋 **Bảng Tọa độ Đầu dò Thực tế:**")
             edited_dets = st.data_editor(st.session_state.det_data, num_rows="dynamic", use_container_width=True, key="ed_dets_3d")
@@ -440,9 +464,10 @@ if app_mode == "1️⃣ Thiết kế Không gian Đa lớp (3D)":
         if room_poly is None or st.session_state.det_data.dropna(subset=['X', 'Y']).empty:
             st.error("Lỗi: Cần vẽ phòng và rải đầu dò (nhớ bấm nút Cập nhật) trước khi chạy!")
         else:
-            with st.spinner('Đang nội suy không gian 3D và kết xuất báo cáo...'):
-                obs_polys = create_obstacle_polys(st.session_state.obs_data)
+            with st.spinner('Đang nội suy không gian 3D True-Space và kết xuất báo cáo...'):
+                obs_polys = create_obstacle_polys(st.session_state.obs_data) # Chỉ lấy vật cản Đặc để tính điểm mù 2D
                 
+                # Biểu đồ 3D sẽ lấy toàn bộ DataFrame để vẽ cả đồ trang trí
                 fig_3d = generate_plotly_3d_complex(room_poly, room_z, obs_polys, st.session_state.obs_data, st.session_state.det_data, panel_x, panel_y, panel_z)
                 st.plotly_chart(fig_3d, use_container_width=True)
                 
@@ -516,7 +541,12 @@ elif app_mode == "2️⃣ Rải nhanh trên Bản vẽ 2D (Overlay)":
             edited_dets_2d = st.data_editor(st.session_state.det_data_2d, num_rows="dynamic", use_container_width=True, key="ed_dets_2d_manual")
             
             st.write("🚧 **Vẽ Vật cản (Chặn bán kính trên ảnh)**")
-            edited_obs_2d = st.data_editor(st.session_state.obs_data_2d, num_rows="dynamic", use_container_width=True, column_config={"Type": st.column_config.SelectboxColumn("Loại", options=["Cylinder", "Box"])}, key="ed_obs_2d_manual")
+            edited_obs_2d = st.data_editor(st.session_state.obs_data_2d, num_rows="dynamic", use_container_width=True, 
+                column_config={
+                    "Type": st.column_config.SelectboxColumn("Hình khối", options=["Cylinder", "Box", "Sphere"]),
+                    "Role": st.column_config.SelectboxColumn("Thuộc tính", options=["Vật cản đặc (Che khí)", "Trang trí 3D (Xuyên thấu)"]),
+                    "Z_base": st.column_config.NumberColumn("Cao độ Z đáy (m)", default=0.0)
+                }, key="ed_obs_2d_manual")
             
             btn_update_2d = st.form_submit_button("🔄 XÁC NHẬN & CẬP NHẬT BẢN VẼ", type="secondary")
             if btn_update_2d:
@@ -573,4 +603,3 @@ st.markdown("""
         Designed and programmed by <b>trggiang</b>.
     </div>
 """, unsafe_allow_html=True)
-
