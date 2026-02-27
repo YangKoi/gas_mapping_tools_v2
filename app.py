@@ -56,7 +56,7 @@ if 'auto_config' not in st.session_state:
     ])
 if 'leak_data' not in st.session_state:
     st.session_state.leak_data = pd.DataFrame([
-        {"Tên Khu vực/Thiết bị": "Bơm hóa chất 01", "Gas": "H2S", "X": 3.0, "Y": 3.0, "Bán kính rủi ro (m)": 4.0}
+        {"Tên Khu vực/Thiết bị": "Bơm hóa chất 01", "Gas": "H2S", "X": 7.5, "Y": 5.0, "Bán kính rủi ro (m)": 4.0}
     ])
 if 'det_data' not in st.session_state:
     st.session_state.det_data = pd.DataFrame(columns=["ID", "Model", "Gas", "X", "Y", "Z", "Radius", "Color"])
@@ -389,7 +389,6 @@ if app_mode == "1️⃣ Thiết kế Không gian Đa lớp (3D)":
         with col_t3:
             if st.button("⨆ Mẫu Chữ U", use_container_width=True, key="btn_u"): st.session_state.room_data = pd.DataFrame({"X": [0, 20, 20, 15, 15, 5, 5, 0], "Y": [0, 0, 15, 15, 5, 5, 15, 15]}); st.rerun()
 
-        # FORM ĐỊNH HÌNH PHÒNG
         with st.form("form_room_3d"):
             edited_room = st.data_editor(st.session_state.room_data, num_rows="dynamic", use_container_width=True, key="ed_room_3d")
             if st.form_submit_button("🔄 Vẽ lại Phòng"):
@@ -434,7 +433,6 @@ if app_mode == "1️⃣ Thiết kế Không gian Đa lớp (3D)":
     with col_input2:
         st.header("2. Phân bổ Mục tiêu & Thiết bị")
         
-        # FORM 1: CẤU HÌNH & TỰ ĐỘNG RẢI
         with st.form("form_auto_3d"):
             st.write("🚨 **Khai báo Nguồn Rủi ro (Smart Target)**")
             edited_leak_3d = st.data_editor(st.session_state.leak_data, num_rows="dynamic", use_container_width=True)
@@ -446,6 +444,10 @@ if app_mode == "1️⃣ Thiết kế Không gian Đa lớp (3D)":
             if st.form_submit_button("🚀 LƯU & TỰ ĐỘNG RẢI SMART TARGET", type="primary"):
                 st.session_state.leak_data = edited_leak_3d
                 st.session_state.auto_config = edited_auto_config
+                
+                # NÂNG CẤP: Lấy vùng Không gian của Vật cản đặc để Trừ đi
+                obs_polys = create_obstacle_polys(st.session_state.obs_data)
+                obs_union = unary_union(obs_polys) if obs_polys else Polygon()
                 
                 if room_poly is not None:
                     new_dets = []
@@ -466,6 +468,9 @@ if app_mode == "1️⃣ Thiết kế Không gian Đa lớp (3D)":
                         else:
                             valid_area = room_poly 
                         
+                        # NÂNG CẤP: Khoét rỗng vùng đặt đầu dò nếu đụng trúng Vật cản đặc
+                        valid_area = valid_area.difference(obs_union)
+                        
                         count = 1
                         for x in np.linspace(minx + (maxx-minx)/(2*nx), maxx - (maxx-minx)/(2*nx), nx):
                             for y in np.linspace(miny + (maxy-miny)/(2*ny), maxy - (maxy-miny)/(2*ny), ny):
@@ -476,7 +481,6 @@ if app_mode == "1️⃣ Thiết kế Không gian Đa lớp (3D)":
                     st.session_state.det_data = pd.DataFrame(new_dets)
                     st.rerun()
 
-        # FORM 2: CHỈNH SỬA THỦ CÔNG
         with st.form("form_manual_3d"):
             st.write("🚧 **Lắp ghép Không gian 3D (Bồn chứa / Đường ống)**")
             edited_obs = st.data_editor(st.session_state.obs_data, num_rows="dynamic", use_container_width=True, 
@@ -568,7 +572,6 @@ elif app_mode == "2️⃣ Rải nhanh trên Bản vẽ 2D (Overlay)":
         with col_work_left:
             st.header("2. Phân bổ Mục tiêu & Thiết bị")
             
-            # FORM 1: CẤU HÌNH & TỰ ĐỘNG RẢI
             with st.form("form_auto_2d"):
                 st.write("🚨 **Khai báo Nguồn Rủi ro (Smart Target)**")
                 edited_leak_2d = st.data_editor(st.session_state.leak_data_2d, num_rows="dynamic", use_container_width=True)
@@ -580,6 +583,10 @@ elif app_mode == "2️⃣ Rải nhanh trên Bản vẽ 2D (Overlay)":
                 if st.form_submit_button("🚀 LƯU & TỰ ĐỘNG RẢI SMART TARGET", type="primary", use_container_width=True):
                     st.session_state.leak_data_2d = edited_leak_2d
                     st.session_state.auto_config_2d = edited_auto_config_2d
+                    
+                    # NÂNG CẤP 2D: Lấy vùng Không gian của Vật cản đặc để Trừ đi
+                    obs_polys_2d = create_obstacle_polys(st.session_state.obs_data_2d)
+                    obs_union_2d = unary_union(obs_polys_2d) if obs_polys_2d else Polygon()
                     
                     new_dets_2d = []
                     bg_poly = Polygon([(0,0), (bg_real_width,0), (bg_real_width, bg_real_height), (0, bg_real_height)])
@@ -595,6 +602,9 @@ elif app_mode == "2️⃣ Rải nhanh trên Bản vẽ 2D (Overlay)":
                         else:
                             valid_area = bg_poly
                             
+                        # NÂNG CẤP: Khoét rỗng vùng đặt đầu dò
+                        valid_area = valid_area.difference(obs_union_2d)
+                            
                         count = 1
                         for x in np.linspace(spacing/2, bg_real_width - spacing/2, nx):
                             for y in np.linspace(spacing/2, bg_real_height - spacing/2, ny):
@@ -604,7 +614,6 @@ elif app_mode == "2️⃣ Rải nhanh trên Bản vẽ 2D (Overlay)":
                     st.session_state.det_data_2d = pd.DataFrame(new_dets_2d)
                     st.rerun()
 
-            # FORM 2: CHỈNH SỬA THỦ CÔNG
             with st.form("form_manual_2d"):
                 st.write("📋 **Tọa độ Thiết bị (Chỉnh tay nếu đè lên vật cản):**")
                 edited_dets_2d = st.data_editor(st.session_state.det_data_2d, num_rows="dynamic", use_container_width=True, height=200)
