@@ -453,7 +453,7 @@ if app_mode == "1️⃣ Thiết kế Không gian Đa lớp (3D)":
     with col_info2: client_name = st.text_input("Khách hàng", value="Nhà máy ABC", key="cn_1")
     with col_info3: report_number = st.text_input("Số Báo cáo", value="RKV_TE_001/BC", key="rn_1")
     
-    author_name = st.text_input("Người lập báo cáo", value="Cao Minh Lợi - Giám đốc Kỹ thuật", key="au_1")
+    author_name = st.text_input("Người lập báo cáo", value="Nguyễn Đình Trường Giang", key="au_1")
     report_date = st.date_input("Ngày lập báo cáo", key="rd_1")
 
     if st.button("🚀 CHẠY MÔ PHỎNG & TẠO FILE BÁO CÁO (3D)", type='primary', use_container_width=True):
@@ -599,7 +599,7 @@ elif app_mode == "2️⃣ Rải nhanh trên Bản vẽ 2D (Overlay)":
     with col_info2: client_name = st.text_input("Khách hàng", value="Nhà máy ABC", key="cn_2")
     with col_info3: report_number = st.text_input("Số Báo cáo", value="RKV_TE_001/BC", key="rn_2")
     
-    author_name = st.text_input("Người lập báo cáo", value="Cao Minh Lợi - Giám đốc Kỹ thuật", key="au_2")
+    author_name = st.text_input("Người lập báo cáo", value="Nguyễn Đình Trường Giang", key="au_2")
     report_date = st.date_input("Ngày lập báo cáo", key="rd_2")
 
     if st.button("🚀 CHẠY MÔ PHỎNG & TẠO FILE BÁO CÁO (2D)", type='primary', use_container_width=True):
@@ -641,3 +641,4 @@ st.markdown("""
         Designed and programmed by <b>trggiang</b>.
     </div>
 """, unsafe_allow_html=True)
+
