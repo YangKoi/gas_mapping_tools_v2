@@ -445,7 +445,6 @@ if app_mode == "1️⃣ Thiết kế Không gian Đa lớp (3D)":
                 st.session_state.leak_data = edited_leak_3d
                 st.session_state.auto_config = edited_auto_config
                 
-                # NÂNG CẤP: Lấy vùng Không gian của Vật cản đặc để Trừ đi
                 obs_polys = create_obstacle_polys(st.session_state.obs_data)
                 obs_union = unary_union(obs_polys) if obs_polys else Polygon()
                 
@@ -458,8 +457,6 @@ if app_mode == "1️⃣ Thiết kế Không gian Đa lớp (3D)":
                         else: z_val = 1.5 
                         
                         spacing = row_cfg["Radius"] * 1.5 
-                        minx, miny, maxx, maxy = room_poly.bounds
-                        nx, ny = max(1, math.ceil((maxx - minx)/spacing)), max(1, math.ceil((maxy - miny)/spacing))
                         
                         target_leaks = edited_leak_3d[edited_leak_3d['Gas'] == target_gas].dropna(subset=['X', 'Y'])
                         if not target_leaks.empty:
@@ -468,16 +465,31 @@ if app_mode == "1️⃣ Thiết kế Không gian Đa lớp (3D)":
                         else:
                             valid_area = room_poly 
                         
-                        # NÂNG CẤP: Khoét rỗng vùng đặt đầu dò nếu đụng trúng Vật cản đặc
                         valid_area = valid_area.difference(obs_union)
                         
-                        count = 1
-                        for x in np.linspace(minx + (maxx-minx)/(2*nx), maxx - (maxx-minx)/(2*nx), nx):
-                            for y in np.linspace(miny + (maxy-miny)/(2*ny), maxy - (maxy-miny)/(2*ny), ny):
-                                pt = Point(x, y)
-                                if valid_area.contains(pt): 
-                                    new_dets.append({"ID": f"{row_cfg['Model']} ({count:02d})", "Model": row_cfg['Model'], "Gas": target_gas, "X": round(x, 1), "Y": round(y, 1), "Z": z_val, "Radius": row_cfg["Radius"], "Color": row_cfg["Color"]})
-                                    count += 1
+                        # THUẬT TOÁN QUÉT LƯỚI ĐỘ PHÂN GIẢI CAO (0.5m) ĐỂ NÉ VẬT CẢN
+                        if not valid_area.is_empty:
+                            minx, miny, maxx, maxy = valid_area.bounds
+                            grid_res = 0.5 # Lưới quét cực chi tiết
+                            xs = np.arange(minx, maxx + grid_res, grid_res)
+                            ys = np.arange(miny, maxy + grid_res, grid_res)
+                            
+                            placed_pts = []
+                            count = 1
+                            for x in xs:
+                                for y in ys:
+                                    pt = Point(x, y)
+                                    if valid_area.contains(pt):
+                                        too_close = False
+                                        for px, py in placed_pts:
+                                            # Nếu lân cận đã có 1 đầu dò (khoảng cách < bán kính bao phủ) thì bỏ qua
+                                            if math.hypot(x - px, y - py) < spacing:
+                                                too_close = True
+                                                break
+                                        if not too_close:
+                                            placed_pts.append((x, y))
+                                            new_dets.append({"ID": f"{row_cfg['Model']} ({count:02d})", "Model": row_cfg['Model'], "Gas": target_gas, "X": round(x, 1), "Y": round(y, 1), "Z": z_val, "Radius": row_cfg["Radius"], "Color": row_cfg["Color"]})
+                                            count += 1
                     st.session_state.det_data = pd.DataFrame(new_dets)
                     st.rerun()
 
@@ -584,7 +596,6 @@ elif app_mode == "2️⃣ Rải nhanh trên Bản vẽ 2D (Overlay)":
                     st.session_state.leak_data_2d = edited_leak_2d
                     st.session_state.auto_config_2d = edited_auto_config_2d
                     
-                    # NÂNG CẤP 2D: Lấy vùng Không gian của Vật cản đặc để Trừ đi
                     obs_polys_2d = create_obstacle_polys(st.session_state.obs_data_2d)
                     obs_union_2d = unary_union(obs_polys_2d) if obs_polys_2d else Polygon()
                     
@@ -593,7 +604,6 @@ elif app_mode == "2️⃣ Rải nhanh trên Bản vẽ 2D (Overlay)":
                     for _, row_cfg in edited_auto_config_2d.iterrows():
                         target_gas = row_cfg["Target Gas"]
                         spacing = row_cfg["Radius"] * 1.5 
-                        nx, ny = max(1, math.ceil(bg_real_width / spacing)), max(1, math.ceil(bg_real_height / spacing))
                         
                         target_leaks = edited_leak_2d[edited_leak_2d['Gas'] == target_gas].dropna(subset=['X', 'Y'])
                         if not target_leaks.empty:
@@ -602,15 +612,30 @@ elif app_mode == "2️⃣ Rải nhanh trên Bản vẽ 2D (Overlay)":
                         else:
                             valid_area = bg_poly
                             
-                        # NÂNG CẤP: Khoét rỗng vùng đặt đầu dò
                         valid_area = valid_area.difference(obs_union_2d)
+                        
+                        # THUẬT TOÁN QUÉT LƯỚI ĐỘ PHÂN GIẢI CAO (0.5m) CHO 2D
+                        if not valid_area.is_empty:
+                            minx, miny, maxx, maxy = valid_area.bounds
+                            grid_res = 0.5
+                            xs = np.arange(minx, maxx + grid_res, grid_res)
+                            ys = np.arange(miny, maxy + grid_res, grid_res)
                             
-                        count = 1
-                        for x in np.linspace(spacing/2, bg_real_width - spacing/2, nx):
-                            for y in np.linspace(spacing/2, bg_real_height - spacing/2, ny):
-                                if valid_area.contains(Point(x, y)):
-                                    new_dets_2d.append({"ID": f"{row_cfg['Model']} ({count:02d})", "Model": row_cfg['Model'], "Gas": target_gas, "X": round(x, 1), "Y": round(y, 1), "Radius": row_cfg["Radius"], "Color": row_cfg["Color"]})
-                                    count += 1
+                            placed_pts = []
+                            count = 1
+                            for x in xs:
+                                for y in ys:
+                                    pt = Point(x, y)
+                                    if valid_area.contains(pt):
+                                        too_close = False
+                                        for px, py in placed_pts:
+                                            if math.hypot(x - px, y - py) < spacing:
+                                                too_close = True
+                                                break
+                                        if not too_close:
+                                            placed_pts.append((x, y))
+                                            new_dets_2d.append({"ID": f"{row_cfg['Model']} ({count:02d})", "Model": row_cfg['Model'], "Gas": target_gas, "X": round(x, 1), "Y": round(y, 1), "Radius": row_cfg["Radius"], "Color": row_cfg["Color"]})
+                                            count += 1
                     st.session_state.det_data_2d = pd.DataFrame(new_dets_2d)
                     st.rerun()
 
