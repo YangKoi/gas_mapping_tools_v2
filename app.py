@@ -41,7 +41,7 @@ with st.sidebar:
 
 st.title("🛡️ Riken Viet - Hệ thống Thiết kế & Dự toán Vùng phủ Khí")
 
-# --- KHỞI TẠO DỮ LIỆU ĐÃ BỔ SUNG CƠ CHẾ BƠM HÚT ---
+# --- KHỞI TẠO DỮ LIỆU ---
 if 'room_data' not in st.session_state:
     st.session_state.room_data = pd.DataFrame({"X": [0, 15, 15, 0], "Y": [0, 0, 10, 10]}) 
 if 'obs_data' not in st.session_state:
@@ -50,8 +50,9 @@ if 'obs_data' not in st.session_state:
     ])
 if 'auto_config' not in st.session_state:
     st.session_state.auto_config = pd.DataFrame([
-        {"Target Gas": "CH4", "Phương thức": "Khuếch tán", "Layer": "Khí Nhẹ (Sát trần)", "Model": "SD-1", "Radius": 5.0, "Color": "cyan"},
-        {"Target Gas": "H2S", "Phương thức": "Bơm hút", "Layer": "Khí Nặng (Sát sàn)", "Model": "GD-70D", "Radius": 0.0, "Color": "magenta"}
+        {"Target Gas": "CH4", "Phương thức": "Khuếch tán", "Layer": "Khí Nhẹ (Sát trần)", "Model": "SD-1 (Catalytic)", "Radius": 5.0, "Color": "cyan"},
+        {"Target Gas": "O2", "Phương thức": "Khuếch tán", "Layer": "Khí Trung bình (Vùng thở)", "Model": "OX-600", "Radius": 4.0, "Color": "lime"},
+        {"Target Gas": "H2S", "Phương thức": "Bơm hút", "Layer": "Khí Nặng (Sát sàn)", "Model": "GD-70D (Electro)", "Radius": 0.0, "Color": "magenta"}
     ])
 if 'leak_data' not in st.session_state:
     st.session_state.leak_data = pd.DataFrame([
@@ -169,13 +170,14 @@ def generate_2d_plot(room_poly, obs_polys, df_dets_group, df_leaks, gas_name, px
             ax.add_patch(plt.Circle((det['X'], det['Y']), det['Radius'], color=c, fill=False, linestyle='--', lw=1.5, zorder=3))
             ax.plot(det['X'], det['Y'], '^', color=c, markersize=12, markeredgecolor='black', zorder=5)
             ax.text(det['X']+0.3, det['Y']+0.3, str(det['ID']), fontsize=8, color='black', zorder=6, bbox=dict(facecolor='white', alpha=0.7, edgecolor='none', pad=1))
-        else: # BƠM HÚT
+        else: # BƠM HÚT - Đi ống vuông góc chữ L trên 2D
             hx, hy = det.get('X_hút', det['X']), det.get('Y_hút', det['Y'])
             if pd.isna(hx) or pd.isna(hy): hx, hy = det['X'], det['Y']
             ax.plot(det['X'], det['Y'], 's', color=c, markersize=10, markeredgecolor='black', zorder=5)
             ax.text(det['X']+0.3, det['Y']+0.3, f"{det['ID']} (Máy)", fontsize=8, color='black', zorder=6, bbox=dict(facecolor='white', alpha=0.7, edgecolor='none', pad=1))
             ax.plot(hx, hy, 'd', color=c, markersize=8, markeredgecolor='white', zorder=5)
-            ax.plot([det['X'], hx], [det['Y'], hy], color=c, linestyle='-.', lw=2, zorder=4)
+            # Vẽ ống chữ L
+            ax.plot([det['X'], hx, hx], [det['Y'], det['Y'], hy], color=c, linestyle='-.', lw=2, zorder=4)
 
     ax.set_title(f"Bản đồ phân tích: {gas_name} | Mức an toàn (Khuếch tán): {ty_le:.1f}%", fontweight='bold')
     ax.axis('equal'); ax.grid(True, linestyle=':', alpha=0.5)
@@ -218,18 +220,22 @@ def generate_plotly_3d_complex(room_poly, rz, obs_polys, df_obs, df_dets, df_lea
         
         if det.get('Phương thức', 'Khuếch tán') == 'Khuếch tán':
             hover_label = f"Model: {det['ID']}<br>Mục tiêu: {det['Gas']}<br>Cao độ Z: {det['Z']}m"
-            # SỬA LỖI: Chuyển 'triangle-up' thành 'circle' (Plotly 3D hỗ trợ circle)
             fig.add_trace(go.Scatter3d(x=[det['X']], y=[det['Y']], z=[det['Z']], mode='markers+text', marker=dict(symbol='circle', size=6, color='white'), text=[f"{det['ID']}"], textposition="top center", textfont=dict(color="white", size=10), name=f"Phân hệ {det['Gas']} (Khuếch tán)", hoverinfo="text", hovertext=hover_label, legendgroup=det['Gas'], showlegend=show_leg))
             sx, sy, sz = get_sphere(det['X'], det['Y'], det['Z'], det['Radius'])
             fig.add_trace(go.Surface(x=sx, y=sy, z=sz, opacity=0.15, showscale=False, colorscale=[[0, c], [1, c]], legendgroup=det['Gas'], showlegend=False, hoverinfo='skip'))
         
-        else: # BƠM HÚT
+        else: # BƠM HÚT - ĐI ỐNG ÁP TRẦN (CEILING ROUTING)
             hx, hy, hz = det.get('X_hút', det['X']), det.get('Y_hút', det['Y']), det.get('Z_hút', det['Z'])
             if pd.isna(hx) or pd.isna(hy) or pd.isna(hz): hx, hy, hz = det['X'], det['Y'], det['Z']
             
             fig.add_trace(go.Scatter3d(x=[det['X']], y=[det['Y']], z=[det['Z']], mode='markers+text', marker=dict(symbol='square', size=6, color=c), text=[f"{det['ID']}"], textposition="top center", textfont=dict(color="white", size=10), name=f"Phân hệ {det['Gas']} (Bơm hút)", hoverinfo="text", hovertext=f"Thân máy: {det['ID']}", legendgroup=det['Gas'], showlegend=show_leg))
             fig.add_trace(go.Scatter3d(x=[hx], y=[hy], z=[hz], mode='markers', marker=dict(symbol='diamond', size=4, color='white', line=dict(color=c, width=2)), hoverinfo="text", hovertext="Điểm lấy mẫu (Sampling Point)", legendgroup=det['Gas'], showlegend=False))
-            fig.add_trace(go.Scatter3d(x=[det['X'], hx], y=[det['Y'], hy], z=[det['Z'], hz], mode='lines', line=dict(color=c, width=4, dash='dash'), hoverinfo="text", hovertext="Ống dẫn khí Teflon/PU", legendgroup=det['Gas'], showlegend=False))
+            
+            # Quỹ đạo ống đi vuông góc áp trần
+            path_x = [det['X'], det['X'], hx, hx, hx]
+            path_y = [det['Y'], det['Y'], det['Y'], hy, hy]
+            path_z = [det['Z'], rz, rz, rz, hz]
+            fig.add_trace(go.Scatter3d(x=path_x, y=path_y, z=path_z, mode='lines', line=dict(color=c, width=4, dash='dash'), hoverinfo="text", hovertext="Ống dẫn khí Teflon/PU (Đi áp trần)", legendgroup=det['Gas'], showlegend=False))
 
         added_gases.add(det['Gas'])
 
@@ -296,11 +302,14 @@ def build_bom_df(det_df, p_x, p_y, r_z, p_z, waste):
             cable_down = abs(r_z - d['Z']) if 'Z' in valid_dets.columns and not pd.isna(d.get('Z')) else 1.5 
             total_cable_length += (cable_up + cable_horizontal + cable_down)
             
+            # CẬP NHẬT: Tính chiều dài ống y hệt lộ trình đi áp trần
             if d.get('Phương thức', 'Khuếch tán') == 'Bơm hút':
                 hx, hy, hz = d.get('X_hút', d['X']), d.get('Y_hút', d['Y']), d.get('Z_hút', d['Z'])
                 if pd.notna(hx) and pd.notna(hy) and pd.notna(hz):
-                    tube_len = abs(hx - d['X']) + abs(hy - d['Y']) + abs(hz - d['Z'])
-                    total_tube_length += tube_len
+                    tube_up = abs(r_z - d['Z'])          # Từ máy lên trần
+                    tube_horiz = abs(hx - d['X']) + abs(hy - d['Y']) # Đi ngang trên trần
+                    tube_down = abs(r_z - hz)            # Thả từ trần xuống điểm hút
+                    total_tube_length += (tube_up + tube_horiz + tube_down)
 
         total_cable_length = math.ceil(total_cable_length * (1 + waste / 100))
         total_tube_length = math.ceil(total_tube_length * (1 + waste / 100))
@@ -308,7 +317,7 @@ def build_bom_df(det_df, p_x, p_y, r_z, p_z, waste):
     bom_items.append({"STT": stt, "Hạng mục thiết bị": "Cáp tín hiệu chống nhiễu chuyên dụng", "Đơn vị": "Mét", "Khối lượng": total_cable_length})
     stt+=1
     if total_tube_length > 0:
-        bom_items.append({"STT": stt, "Hạng mục thiết bị": "Ống dẫn khí lấy mẫu (Teflon/PU)", "Đơn vị": "Mét", "Khối lượng": total_tube_length})
+        bom_items.append({"STT": stt, "Hạng mục thiết bị": "Ống dẫn khí lấy mẫu chuyên dụng (Teflon/PU)", "Đơn vị": "Mét", "Khối lượng": total_tube_length})
         stt+=1
         
     bom_items.append({"STT": stt, "Hạng mục thiết bị": "Chuông đèn cảnh báo (Siren/Light)", "Đơn vị": "Bộ", "Khối lượng": len(valid_dets) if not valid_dets.empty else 1})
@@ -352,7 +361,7 @@ def generate_full_word_report(figs_dict, img_3d_bytes, bom_df, p_name, c_name, a
     if is_3d and img_3d_bytes:
         h1 = doc.add_heading(f'{section_num}. PHÂN BỔ KHÔNG GIAN TỔNG THỂ (MÔ PHỎNG 3D)', level=1)
         for run in h1.runs: run.font.name = 'Arial'
-        doc.add_paragraph("Sơ đồ 3D: Vùng rủi ro (đỏ mờ), Đầu dò khuếch tán (vòng cầu), Đầu dò bơm hút (đường ống nét đứt dẫn khí).")
+        doc.add_paragraph("Sơ đồ 3D: Vùng rủi ro (đỏ mờ), Đầu dò khuếch tán (vòng cầu), Đầu dò bơm hút (ống dẫn khí đi áp trần).")
         p = doc.add_paragraph()
         p.add_run().add_picture(img_3d_bytes, width=Inches(6.0))
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -457,7 +466,7 @@ if app_mode == "1️⃣ Thiết kế Không gian Đa lớp (3D)":
                     hx, hy = det.get('X_hút', det['X']), det.get('Y_hút', det['Y'])
                     ax_grid.plot(det['X'], det['Y'], 's', color=c, markersize=8, markeredgecolor='black')
                     ax_grid.plot(hx, hy, 'd', color=c, markersize=6)
-                    ax_grid.plot([det['X'], hx], [det['Y'], hy], color=c, linestyle='-.')
+                    ax_grid.plot([det['X'], hx, hx], [det['Y'], det['Y'], hy], color=c, linestyle='-.') # 2D Vuông góc
                 else:
                     ax_grid.plot(det['X'], det['Y'], '^', color=c, markersize=8, markeredgecolor='black')
 
@@ -590,7 +599,7 @@ if app_mode == "1️⃣ Thiết kế Không gian Đa lớp (3D)":
         if room_poly is None or st.session_state.det_data.dropna(subset=['X', 'Y']).empty:
             st.error("Lỗi: Cần vẽ phòng và rải đầu dò trước khi chạy!")
         else:
-            with st.spinner('Đang nội suy thuật toán Đường ống 3D và kết xuất báo cáo...'):
+            with st.spinner('Đang nội suy thuật toán Đường ống 3D áp trần và kết xuất báo cáo...'):
                 obs_polys = create_obstacle_polys(st.session_state.obs_data)
                 fig_3d = generate_plotly_3d_complex(room_poly, room_z, obs_polys, st.session_state.obs_data, st.session_state.det_data, st.session_state.leak_data, panel_x, panel_y, panel_z)
                 st.plotly_chart(fig_3d, use_container_width=True)
@@ -773,7 +782,7 @@ elif app_mode == "2️⃣ Rải nhanh trên Bản vẽ 2D (Overlay)":
                     hx, hy = det.get('X_hút', det['X']), det.get('Y_hút', det['Y'])
                     ax_prev.plot(det['X'], det['Y'], 's', color=c, markersize=10, markeredgecolor='black') 
                     ax_prev.plot(hx, hy, 'd', color=c, markersize=8, markeredgecolor='white') 
-                    ax_prev.plot([det['X'], hx], [det['Y'], hy], color=c, linestyle='-.', lw=2) 
+                    ax_prev.plot([det['X'], hx, hx], [det['Y'], det['Y'], hy], color=c, linestyle='-.', lw=2) # Ống vuông góc chữ L
                     
             ax_prev.set_xlim(0, bg_real_width); ax_prev.set_ylim(0, bg_real_height)
             ax_prev.set_aspect('equal'); ax_prev.grid(True, linestyle=':', alpha=0.5)
