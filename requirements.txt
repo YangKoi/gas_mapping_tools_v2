@@ -9,6 +9,7 @@ shapely
 Pillow
 docxtpl
 docxcompose
+trimesh
 
 
 
